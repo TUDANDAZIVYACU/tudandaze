@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Businessbi {
+  id               String           @id @default(uuid())
+  name             String
+  email            String?          @unique
+  telephone        String?          @unique
+  assureurId       String?
+  assureur         Assureur?        @relation(fields: [assureurId], references: [id])
+  numeroPolice     String?          // affiché "RC" dans l'application
+  nif              String?
+  secteurActivite  String?
+  proprietaire     String?
+  telephoneContact String?          // téléphone saisi à l'inscription (contact), distinct de telephone (identifiant de connexion)
+  accesActif       Boolean          @default(true)
+  products         Product[]
+  transactions     Transaction[]
+  mouvementsStock  MouvementStock[]
+  depenses         Depense[]
+  dettes           Dette[]
+  caisseEntries    CaisseEntry[]
+  banqueEntries    BanqueEntry[]
+  ventes           Vente[]
+  categories       Categorie[]
+  immobilisations  Immobilisation[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  membres          MembreBusinessbi[]
+
+  @@index([assureurId])
+}
+
+// Utilisateur d'une entreprise cliente (admin ou caissier), ajouté par l'administrateur de cette entreprise
+model MembreBusinessbi {
+  id           String     @id @default(uuid())
+  email        String?    @unique
+  telephone    String?    @unique
+  clerkUserId  String?    @unique
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id], onDelete: Cascade)
+  nom          String?
+  role         String     @default("caissier") // "admin" | "caissier"
+  createdAt    DateTime   @default(now())
+
+  @@index([businessbiId])
+}
+
+// Compagnie d'assurance (ou agence) : créée et gérée par les propriétaires de l'application
+model Assureur {
+  id           String         @id @default(uuid())
+  code         String         @unique
+  nom          String
+  email        String?        @unique
+  telephone    String?
+  actif        Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  clients      Businessbi[]
+  utilisateurs AssureurUser[]
+}
+
+// Utilisateur d'un assureur. Créé avec un email et/ou un téléphone ; clerkUserId est rempli à la première connexion
+// role : "ADMIN" (gère ses clients) | "LECTEUR" (consultation des stocks)
+model AssureurUser {
+  id          String   @id @default(uuid())
+  email       String?  @unique
+  telephone   String?  @unique
+  clerkUserId String?  @unique
+  assureurId  String
+  assureur    Assureur @relation(fields: [assureurId], references: [id])
+  nom         String?
+  role        String   @default("ADMIN")
+  createdAt   DateTime @default(now())
+
+  @@index([assureurId])
+}
+
+model Product {
+  id              String           @id @default(uuid())
+  name            String
+  prixAchat       Float            @default(0)
+  prixVente       Float            @default(0)
+  price           Float
+  quantity        Int              @default(0)
+  unit            String
+  imageUrl        String?
+  archivedAt      DateTime?
+  businessbiId    String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  businessbi      Businessbi       @relation(fields: [businessbiId], references: [id])
+  transactions    Transaction[]
+  mouvementsStock MouvementStock[]
+
+  @@index([businessbiId])
+}
+
+model Transaction {
+  id           String     @id @default(uuid())
+  type         String
+  quantity     Int
+  prixAchat    Float      @default(0)
+  prixVente    Float      @default(0)
+  dateApprovis DateTime   @default(now())
+  factureUrl   String?    // photo de la facture d'achat (facultative), stockée sur Vercel Blob
+  venteId      String?    // pour les sorties (OUT) : id de la vente qui a produit cette ligne (permet d'annuler la vente en entier)
+  productId    String
+  businessbiId String
+  createdAt    DateTime   @default(now())
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([venteId])
+  @@index([businessbiId, createdAt])
+  @@index([productId])
+  @@index([businessbiId, type, dateApprovis])
+}
+
+// Journal de tous les mouvements de stock (source de vérité pour le stock à une date donnée)
+// quantite est signée : + entrée, - sortie
+// type : "INITIAL" | "APPROVISIONNEMENT" | "VENTE" | "ANNULATION_VENTE" | "AJUSTEMENT"
+// source : "MIGRATION" | "TRANSACTION" | "VENTE" | "MANUEL" ; refId = id de la vente/transaction liée
+model MouvementStock {
+  id           String     @id @default(uuid())
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+  type         String
+  quantite     Int
+  prixAchat    Float      @default(0)
+  date         DateTime   @default(now())
+  source       String?
+  refId        String?
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@index([businessbiId, date])
+  @@index([productId, date])
+}
+
+// Équipement de l'entreprise (immobilisation) : photos de la facture et de l'équipement stockées sur Vercel Blob
+model Immobilisation {
+  id              String     @id @default(uuid())
+  designation     String
+  dateAcquisition DateTime
+  prix            Float
+  numeroSerie     String?
+  factureUrl      String?
+  photoUrl        String?
+  businessbiId    String
+  businessbi      Businessbi @relation(fields: [businessbiId], references: [id])
+  createdAt       DateTime   @default(now())
+
+  @@index([businessbiId, dateAcquisition])
+}
+
+model Depense {
+  id           String     @id @default(uuid())
+  montant      Float
+  description  String
+  date         DateTime   @default(now())
+  categorie    String
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([businessbiId, date])
+}
+
+model Dette {
+  id           String     @id @default(uuid())
+  debiteur     String
+  montant      Float
+  montantPaye  Float      @default(0)
+  description  String
+  dateEcheance DateTime?
+  statut       String     @default("en_cours")
+  venteId      String?    // dette créée par une vente non soldée : id de cette vente
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+  paiements    Paiement[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([venteId])
+  @@index([businessbiId, createdAt])
+}
+
+model Paiement {
+  id        String   @id @default(uuid())
+  montant   Float
+  date      DateTime @default(now())
+  note      String?
+  detteId   String
+  dette     Dette    @relation(fields: [detteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([detteId])
+}
+
+model CaisseEntry {
+  id           String     @id @default(cuid())
+  ordo         Int
+  date         DateTime
+  libelle      String
+  categorie    String
+  type         String
+  debit        Float      @default(0)
+  credit       Float      @default(0)
+  createdAt    DateTime   @default(now())
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+
+  @@index([businessbiId, date])
+}
+
+model BanqueEntry {
+  id           String     @id @default(cuid())
+  ordo         Int
+  date         DateTime
+  bordereau    String
+  libelle      String
+  banque       String
+  compte       String
+  categorie    String
+  type         String
+  credit       Float      @default(0)
+  debit        Float      @default(0)
+  createdAt    DateTime   @default(now())
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+
+  @@index([businessbiId, date])
+}
+
+model Vente {
+  id              String      @id @default(cuid())
+  numero          String?
+  avecFacture     Boolean     @default(false)
+  clientNom       String?
+  clientAdresse   String?
+  clientTelephone String?
+  montantHT       Float       @default(0)
+  montantTVA      Float       @default(0)
+  montantTotal    Float
+  montantPaye     Float
+  solde           Float       @default(0)
+  businessbiId    String
+  businessbi      Businessbi  @relation(fields: [businessbiId], references: [id])
+  items           VenteItem[]
+  createdAt       DateTime    @default(now())
+
+  @@index([businessbiId, createdAt])
+}
+
+model VenteItem {
+  id          String  @id @default(cuid())
+  venteId     String
+  vente       Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  productId   String
+  productName String
+  quantity    Int
+  unit        String
+  prixVente   Float
+  prixAchat   Float   @default(0)
+
+  @@index([venteId])
+}
+
+model Categorie {
+  id           String     @id @default(cuid())
+  nom          String
+  module       String     // "CAISSE" | "BANQUE"
+  type         String     // "DEBIT" | "CREDIT"
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@unique([businessbiId, module, type, nom])
+  @@index([businessbiId, module, type])
+}

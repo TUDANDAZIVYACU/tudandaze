@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: retro --default, light, dark --prefersdark, cupcake, bumblebee, emerald,
+          corporate, synthwave, cyberpunk, valentine, halloween, garden,
+          forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury,
+          dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter;
+}
+
+@keyframes wiggle {
+  0% , 100% {
+      transform: rotate(0deg);
+  }
+  50% {
+      transform: rotate(2deg);
+  }
+}
+
+.wiggle-animation{
+  animation:  wiggle 1.5s  ease-in-out infinite;
+}
+
+
+/* React toastify override */
+
+:root {
+  --toastify-color-light: #ECE3CA;
+  --toastify-text-color-light: #af1a07b9;
+}
+
+body,
+input,
+select,
+textarea,
+button {
+  font-weight: 700;
+}
