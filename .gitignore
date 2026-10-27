@@ -60,3 +60,6 @@ dump.sql
 
 backup.dump
 dump.sql
+
+prisma/dev.db
+*.db
