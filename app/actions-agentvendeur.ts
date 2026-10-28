@@ -12,17 +12,17 @@ import { accesAvecCache } from "@/lib/acces-cache"
 
 // Toutes les fonctions de ce fichier lisent l'identité côté serveur (Clerk) :
 // aucun email ni identifiant envoyé par le navigateur n'est cru.
-// Un assureur ne voit et ne modifie que SES clients.
+// Un agentvendeur ne voit et ne modifie que SES clients.
 // Les clients s'enregistrent eux-mêmes avec son code (actions-inscription.ts),
-// ou sont importés par l'assureur depuis un fichier Excel (importerClientsAssureur) puis complétés à leur inscription.
-async function exigerAssureur(ecriture = false) {
+// ou sont importés par l'agentvendeur depuis un fichier Excel (importerClientsAgentVendeur) puis complétés à leur inscription.
+async function exigerAgentVendeur(ecriture = false) {
     const user = await currentUser()
     if (!user) throw new Error("Non connecté.")
 
     const acces = await accesAvecCache(user.id, () => withRetry(() => resoudreAcces(user)))
-    if (acces.type !== "assureur") throw new Error("Accès réservé aux assureurs.")
+    if (acces.type !== "agentvendeur") throw new Error("Accès réservé aux agentvendeurs.")
     if (ecriture && acces.role !== "ADMIN") {
-        throw new Error("Action réservée aux administrateurs de l'assureur.")
+        throw new Error("Action réservée aux administrateurs de l'agentvendeur.")
     }
     return acces
 }
@@ -34,26 +34,26 @@ function jourPrecedent(date: string) {
     return d.toISOString().slice(0, 10)
 }
 
-// Informations de l'assureur connecté (pour l'en-tête de son tableau de bord)
-export async function getMonAssureur() {
-    const acces = await exigerAssureur()
-    const assureur = await withRetry(() =>
-        prisma.assureur.findUnique({
-            where: { id: acces.assureurId },
+// Informations de l'agentvendeur connecté (pour l'en-tête de son tableau de bord)
+export async function getMonAgentVendeur() {
+    const acces = await exigerAgentVendeur()
+    const agentvendeur = await withRetry(() =>
+        prisma.agentvendeur.findUnique({
+            where: { id: acces.agentvendeurId },
             select: { id: true, nom: true, code: true }
         })
     )
-    if (!assureur) throw new Error("Assureur introuvable.")
-    return { ...assureur, role: acces.role }
+    if (!agentvendeur) throw new Error("AgentVendeur introuvable.")
+    return { ...agentvendeur, role: acces.role }
 }
 
-// Liste des clients de l'assureur
+// Liste des clients de l'agentvendeur
 // (un client sans email ni téléphone est une fiche importée qui attend l'inscription du client)
-export async function getClientsAssureur() {
-    const acces = await exigerAssureur()
+export async function getClientsAgentVendeur() {
+    const acces = await exigerAgentVendeur()
     const clients = await withRetry(() =>
         prisma.businessbi.findMany({
-            where: { assureurId: acces.assureurId },
+            where: { agentvendeurId: acces.agentvendeurId },
             select: {
                 id: true,
                 name: true,
@@ -83,17 +83,17 @@ export async function getClientsAssureur() {
 
 const MESSAGES_IMPORT_SURS = [
     "Non connecté.",
-    "Accès réservé aux assureurs.",
-    "Action réservée aux administrateurs de l'assureur."
+    "Accès réservé aux agentvendeurs.",
+    "Action réservée aux administrateurs de l'agentvendeur."
 ]
 
 // Importe une liste de clients (Nom de l'entreprise, RC, NIF) lue dans un fichier Excel par le navigateur.
 // Chaque client importé est une fiche « en attente » : le client la complète (propriétaire, téléphone, secteur…)
-// et la rattache à son compte quand il demande à rejoindre son assureur (actions-inscription.ts).
+// et la rattache à son compte quand il demande à rejoindre son agentvendeur (actions-inscription.ts).
 // Ré-importer un fichier corrigé met à jour les fiches encore en attente ; les clients déjà inscrits ne sont jamais modifiés.
-export async function importerClientsAssureur(lignes: LigneImport[]) {
+export async function importerClientsAgentVendeur(lignes: LigneImport[]) {
     try {
-        const acces = await exigerAssureur(true)
+        const acces = await exigerAgentVendeur(true)
 
         if (!Array.isArray(lignes) || lignes.length === 0) {
             return { success: false as const, message: "Le fichier ne contient aucun client à importer." }
@@ -107,7 +107,7 @@ export async function importerClientsAssureur(lignes: LigneImport[]) {
 
         const existants = await withRetry(() =>
             prisma.businessbi.findMany({
-                where: { assureurId: acces.assureurId },
+                where: { agentvendeurId: acces.agentvendeurId },
                 select: { id: true, name: true, numeroPolice: true, nif: true, email: true, telephone: true }
             })
         )
@@ -121,7 +121,7 @@ export async function importerClientsAssureur(lignes: LigneImport[]) {
                         name: c.nom,
                         numeroPolice: c.rc,
                         nif: c.nif,
-                        assureurId: acces.assureurId
+                        agentvendeurId: acces.agentvendeurId
                     }))
                 })
             )
@@ -131,7 +131,7 @@ export async function importerClientsAssureur(lignes: LigneImport[]) {
         for (const m of plan.aMettreAJour) {
             await withRetry(() =>
                 prisma.businessbi.updateMany({
-                    where: { id: m.id, assureurId: acces.assureurId, email: null, telephone: null },
+                    where: { id: m.id, agentvendeurId: acces.agentvendeurId, email: null, telephone: null },
                     data: { name: m.nom, nif: m.nif }
                 })
             )
@@ -159,7 +159,7 @@ export async function importerClientsAssureur(lignes: LigneImport[]) {
 // Sans date, on prend aujourd'hui (heure du Burundi).
 export async function getStockClientALaDate(businessbiId: string, dateFiltre?: string) {
     return executer(async () => {
-        const acces = await exigerAssureur()
+        const acces = await exigerAgentVendeur()
 
         const date = dateFiltre && dateFiltre.trim()
             ? dateFiltre.trim()
@@ -168,7 +168,7 @@ export async function getStockClientALaDate(businessbiId: string, dateFiltre?: s
 
         const client = await withRetry(() =>
             prisma.businessbi.findFirst({
-                where: { id: businessbiId, assureurId: acces.assureurId },
+                where: { id: businessbiId, agentvendeurId: acces.agentvendeurId },
                 select: {
                     id: true,
                     name: true,
@@ -214,7 +214,7 @@ export async function getStockClientALaDate(businessbiId: string, dateFiltre?: s
 // Approvisionnements = liste détaillée des entrées (IN) de la période, avec la photo de la facture si elle existe.
 export async function getVariationStockClient(businessbiId: string, dateDebut: string, dateFin: string) {
     return executer(async () => {
-        const acces = await exigerAssureur()
+        const acces = await exigerAgentVendeur()
 
         const debut = (dateDebut || "").trim()
         const fin = (dateFin || "").trim()
@@ -225,7 +225,7 @@ export async function getVariationStockClient(businessbiId: string, dateDebut: s
 
         const client = await withRetry(() =>
             prisma.businessbi.findFirst({
-                where: { id: businessbiId, assureurId: acces.assureurId },
+                where: { id: businessbiId, agentvendeurId: acces.agentvendeurId },
                 select: { id: true, name: true, numeroPolice: true }
             })
         )
@@ -355,16 +355,16 @@ export async function getVariationStockClient(businessbiId: string, dateDebut: s
     })
 }
 
-// Modifie un client de l'assureur (champs non fournis = inchangés)
-export async function modifierClientAssureur(
+// Modifie un client de l'agentvendeur (champs non fournis = inchangés)
+export async function modifierClientAgentVendeur(
     id: string,
     data: { name?: string; email?: string; telephone?: string; numeroPolice?: string }
 ) {
     return executer(async () => {
-        const acces = await exigerAssureur(true)
+        const acces = await exigerAgentVendeur(true)
 
         const client = await withRetry(() =>
-            prisma.businessbi.findFirst({ where: { id, assureurId: acces.assureurId } })
+            prisma.businessbi.findFirst({ where: { id, agentvendeurId: acces.agentvendeurId } })
         )
         if (!client) throw new Error("Client introuvable.")
 
@@ -399,13 +399,13 @@ export async function modifierClientAssureur(
     })
 }
 
-// Suspend ou réactive l'accès d'un client de l'assureur
+// Suspend ou réactive l'accès d'un client de l'agentvendeur
 export async function basculerAccesClient(clientId: string, actif: boolean) {
     return executer(async () => {
-        const { assureurId } = await exigerAssureur(true)
+        const { agentvendeurId } = await exigerAgentVendeur(true)
         const resultat = await withRetry(() =>
             prisma.businessbi.updateMany({
-                where: { id: clientId, assureurId },
+                where: { id: clientId, agentvendeurId },
                 data: { accesActif: actif }
             })
         )

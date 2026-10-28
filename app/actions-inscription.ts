@@ -6,22 +6,27 @@ import { resoudreAcces } from "@/lib/acces"
 import { executer } from "@/lib/resultat"
 import { withRetry } from "@/lib/retry"
 import { chercherFicheImportee } from "@/lib/import-clients"
+import { DUREE_ESSAI_JOURS } from "@/lib/plans"
 
-// Le client s'enregistre lui-même avec le code de son assureur.
+// Le client s'enregistre lui-même avec le code de son agentvendeur.
 // L'identité (email / téléphone) est lue côté serveur dans Clerk : rien n'est cru depuis le navigateur.
 // Le téléphone saisi dans le formulaire n'est qu'un contact (telephoneContact) : il ne sert jamais à identifier le compte.
-// Tous les champs du formulaire sont obligatoires.
+// Seuls le code de l'agentvendeur et le nom de l'entreprise sont obligatoires ; RC, NIF, secteur d'activité,
+// propriétaire et téléphone sont facultatifs.
 //
-// Si l'assureur a déjà importé le client depuis son fichier Excel (même RC et même NIF), on complète cette fiche
-// au lieu d'en créer une nouvelle : le nom, le RC et le NIF de l'assureur sont conservés.
-export async function rejoindreAssureur(data: {
+// Si l'agentvendeur a déjà importé le client depuis son fichier Excel (même RC et même NIF), on complète cette fiche
+// au lieu d'en créer une nouvelle : le nom, le RC et le NIF de l'agentvendeur sont conservés.
+// Cette recherche n'a lieu que si le RC et le NIF sont tous les deux renseignés.
+//
+// À l'inscription, l'entreprise reçoit un essai gratuit de DUREE_ESSAI_JOURS jours (voir lib/plans.ts).
+export async function rejoindreAgentVendeur(data: {
     code: string
     name: string
-    rc: string
-    nif: string
-    secteurActivite: string
-    proprietaire: string
-    telephone: string
+    rc?: string
+    nif?: string
+    secteurActivite?: string
+    proprietaire?: string
+    telephone?: string
 }) {
     return executer(async () => {
         const user = await currentUser()
@@ -33,31 +38,27 @@ export async function rejoindreAssureur(data: {
 
         const code = data.code?.trim()
         const name = data.name?.trim()
-        const rc = data.rc?.trim()
-        const nif = data.nif?.trim()
-        const secteurActivite = data.secteurActivite?.trim()
-        const proprietaire = data.proprietaire?.trim()
-        const telephoneContact = data.telephone?.trim()
+        // Champs facultatifs : une valeur vide devient null
+        const rc = data.rc?.trim() || null
+        const nif = data.nif?.trim() || null
+        const secteurActivite = data.secteurActivite?.trim() || null
+        const proprietaire = data.proprietaire?.trim() || null
+        const telephoneContact = data.telephone?.trim() || null
 
-        if (!code) throw new Error("Le code de l'assureur est requis.")
+        if (!code) throw new Error("Le code de l'agentvendeur est requis.")
         if (!name) throw new Error("Le nom de votre entreprise est requis.")
-        if (!rc) throw new Error("Le RC est requis.")
-        if (!nif) throw new Error("Le NIF est requis.")
-        if (!secteurActivite) throw new Error("Le secteur d'activité est requis.")
-        if (!proprietaire) throw new Error("Le nom du propriétaire est requis.")
-        if (!telephoneContact) throw new Error("Le téléphone est requis.")
-        if (!/^[+\d\s().-]{6,20}$/.test(telephoneContact)) {
+        if (telephoneContact && !/^[+\d\s().-]{6,20}$/.test(telephoneContact)) {
             throw new Error("Numéro de téléphone invalide.")
         }
 
-        const assureur = await withRetry(() =>
-            prisma.assureur.findFirst({
+        const agentvendeur = await withRetry(() =>
+            prisma.agentvendeur.findFirst({
                 where: { code: { equals: code, mode: "insensitive" }, actif: true },
                 select: { id: true }
             })
         )
-        // Message volontairement identique pour un code faux ou un assureur suspendu
-        if (!assureur) throw new Error("Code assureur invalide.")
+        // Message volontairement identique pour un code faux ou un agentvendeur suspendu
+        if (!agentvendeur) throw new Error("Code agentvendeur invalide.")
 
         // Identifiants vérifiés (principal en priorité)
         const emailsVerifies = user.emailAddresses.filter((e) => e.verification?.status === "verified")
@@ -70,36 +71,52 @@ export async function rejoindreAssureur(data: {
                 ?.phoneNumber ?? null
         if (!email && !telephone) throw new Error("Aucun email ou téléphone vérifié sur ce compte.")
 
-        // Ce client figure-t-il déjà dans la liste importée par son assureur ?
-        const existants = await withRetry(() =>
-            prisma.businessbi.findMany({
-                where: { assureurId: assureur.id },
-                select: { id: true, name: true, numeroPolice: true, nif: true, email: true, telephone: true }
-            })
-        )
-        const recherche = chercherFicheImportee(rc, nif, existants)
-        if (recherche.type === "deja_inscrit") {
-            throw new Error("Ce RC est déjà enregistré chez votre assureur.")
+        // Ce client figure-t-il déjà dans la liste importée par son agentvendeur ?
+        // Recherche possible seulement si le RC et le NIF sont tous les deux fournis.
+        let recherche: ReturnType<typeof chercherFicheImportee> | null = null
+        if (rc && nif) {
+            const existants = await withRetry(() =>
+                prisma.businessbi.findMany({
+                    where: { agentvendeurId: agentvendeur.id },
+                    select: { id: true, name: true, numeroPolice: true, nif: true, email: true, telephone: true }
+                })
+            )
+            recherche = chercherFicheImportee(rc, nif, existants)
+            if (recherche.type === "deja_inscrit") {
+                throw new Error("Ce RC est déjà enregistré chez votre agentvendeur.")
+            }
+            if (recherche.type === "nif_different") {
+                throw new Error("Le NIF ne correspond pas à celui que votre agentvendeur a enregistré pour ce RC.")
+            }
         }
-        if (recherche.type === "nif_different") {
-            throw new Error("Le NIF ne correspond pas à celui que votre assureur a enregistré pour ce RC.")
-        }
+
+        // Fin de l'essai gratuit
+        const dateFinEssai = new Date(Date.now() + DUREE_ESSAI_JOURS * 24 * 60 * 60 * 1000)
 
         let client: { id: string }
         try {
-            if (recherche.type === "a_completer") {
+            if (recherche && recherche.type === "a_completer") {
                 const ficheId = recherche.id
                 // updateMany : ne réussit que si la fiche est toujours en attente (pas d'inscription simultanée)
                 const resultat = await withRetry(() =>
                     prisma.businessbi.updateMany({
-                        where: { id: ficheId, assureurId: assureur.id, email: null, telephone: null },
+                        where: { id: ficheId, agentvendeurId: agentvendeur.id, email: null, telephone: null },
                         data: { email, telephone, secteurActivite, proprietaire, telephoneContact }
                     })
                 )
                 if (resultat.count === 0) {
-                    throw new Error("Cette fiche vient d'être utilisée. Contactez votre assureur.")
+                    throw new Error("Cette fiche vient d'être utilisée. Contactez votre agentvendeur.")
                 }
                 client = { id: ficheId }
+
+                // Essai gratuit pour cette entreprise (sans écraser un abonnement déjà existant)
+                await withRetry(() =>
+                    prisma.abonnement.upsert({
+                        where: { businessbiId: ficheId },
+                        update: {},
+                        create: { businessbiId: ficheId, statut: "essai", dateFin: dateFinEssai }
+                    })
+                )
             } else {
                 client = await withRetry(() =>
                     prisma.businessbi.create({
@@ -112,7 +129,9 @@ export async function rejoindreAssureur(data: {
                             secteurActivite,
                             proprietaire,
                             telephoneContact,
-                            assureurId: assureur.id
+                            agentvendeurId: agentvendeur.id,
+                            // Essai gratuit créé en même temps que l'entreprise
+                            abonnement: { create: { statut: "essai", dateFin: dateFinEssai } }
                         }
                     })
                 )

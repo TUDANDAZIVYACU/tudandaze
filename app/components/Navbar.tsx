@@ -1,6 +1,6 @@
 "use client";
 import { UserButton, useUser } from '@clerk/nextjs'
-import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, Menu, X, Wrench } from 'lucide-react'
+import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, Menu, X, Wrench, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
@@ -17,11 +17,20 @@ const APP_NAME = "ASSURANCE.COM"
 const CLE_CACHE = "navbar-cache-v1"
 type CacheNavbar = { userId: string; info: NavbarInfo }
 
-// Style d'un lien du menu : pastille pleine pour la page ouverte, simple survol pour les autres
+// Style d'un lien du menu : pastille pleine pour la page ouverte, simple survol pour les autres.
+// Téléphone : liens alignés à gauche, un par ligne. Ordinateur : une seule ligne centrée.
 const styleLien = (actif: boolean) =>
-    `flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-center text-[11px] font-semibold leading-tight transition-colors md:shrink-0 md:justify-start md:whitespace-nowrap md:px-2.5 md:text-[13px] ${
+    `flex items-center justify-start gap-1.5 rounded-lg px-3 py-1.5 text-left text-[13px] font-semibold leading-tight transition-colors md:shrink-0 md:whitespace-nowrap md:px-2.5 md:py-2 ${
         actif ? 'bg-primary text-primary-content' : 'hover:bg-base-200'
     }`
+
+// Icône : visible sur téléphone et sur grand écran, masquée entre les deux pour que le menu tienne sur une ligne
+const classeIcone = 'h-4 w-4 md:hidden xl:block'
+
+// Menu ouvert sur téléphone : une colonne, sans interligne. Ordinateur : une seule ligne centrée
+// (elle passe à la ligne seulement sur les écrans de tablette, trop étroits).
+const classeNav = (menuOpen: boolean) =>
+    `${menuOpen ? 'mt-2 flex flex-col items-stretch gap-0' : 'hidden'} md:mt-1 md:flex md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-0.5 lg:flex-nowrap lg:-mx-[8%]`
 
 const Navbar = () => {
     const { user, isLoaded } = useUser()
@@ -40,12 +49,12 @@ const Navbar = () => {
     // Le type de compte est connu une fois la lecture terminée (ou lue depuis le cache)
     const accesCharge = acces !== null
 
-    // Propriétaires, assureurs et comptes à enregistrer ont leur propre affichage ; tous les autres (clients) gardent le menu habituel
-    const mode: 'owner' | 'assureur' | 'inscription' | 'client' =
+    // Propriétaires, agentvendeurs et comptes à enregistrer ont leur propre affichage ; tous les autres (clients) gardent le menu habituel
+    const mode: 'owner' | 'agentvendeur' | 'inscription' | 'client' =
         acces?.type === 'owner'
             ? 'owner'
-            : acces?.type === 'assureur'
-                ? 'assureur'
+            : acces?.type === 'agentvendeur'
+                ? 'agentvendeur'
                 : acces?.type === 'inscription'
                     ? 'inscription'
                     : 'client'
@@ -54,33 +63,28 @@ const Navbar = () => {
     const titre =
         acces?.type === 'owner' || acces?.type === 'inscription'
             ? APP_NAME
-            : acces?.type === 'assureur'
+            : acces?.type === 'agentvendeur'
                 ? acces.nom
                 : businessName
 
-    // phoneClass : position et largeur dans la grille du téléphone (12 colonnes : 3 liens = col-span-4, 4 liens = col-span-3).
-    // Téléphone : ligne 1 OBSERVATION, PRODUIT, APROVISIONNEMENT
-    //             ligne 2 VENTE, HISTORIQUE, DETTES, DEPENSES
-    //             ligne 3 EQUIPEMENTS, CENTRALISATION, UTILISATEURS
-    // compact : sur les écrans très étroits (< 480 px), l'icône est masquée pour que les 4 mots de la ligne 2 tiennent en entier.
-    const allNavLinks = [
-        { href: "/", label: "Observation", icon: LayoutDashboard, adminOnly: false, phoneClass: "order-1 col-span-4", compact: false },
-        { href: "/new-product", label: "Produit", icon: PackagePlus, adminOnly: false, phoneClass: "order-2 col-span-4", compact: false },
-        { href: "/give", label: "Vente", icon: HandHeart, adminOnly: false, phoneClass: "order-4 col-span-3", compact: true },
-        { href: "/transactions", label: "Historique", icon: Receipt, adminOnly: false, phoneClass: "order-5 col-span-3", compact: true },
-        { href: "/dettes", label: "Dettes", icon: ListTree, adminOnly: false, phoneClass: "order-6 col-span-3", compact: true },
-        { href: "/depenses", label: "Dépenses", icon: ListTree, adminOnly: false, phoneClass: "order-7 col-span-3", compact: true },
-        { href: "/immobilisations", label: "Équipements", icon: Wrench, adminOnly: false, phoneClass: "order-8 col-span-4", compact: false },
+    // Ordre d'affichage (téléphone et ordinateur) :
+    // Observation, Produit, Approvisionnement (bouton), Vente, Historique, Dettes, Dépenses, Centralisation,
+    // Équipements, Utilisateurs (administrateur), Abonnement
+    const liensAvant = [
+        { href: "/", label: "Observation", icon: LayoutDashboard },
+        { href: "/new-product", label: "Produit", icon: PackagePlus },
+    ]
+    const liensApres = [
+        { href: "/give", label: "Vente", icon: HandHeart },
+        { href: "/transactions", label: "Historique", icon: Receipt },
+        { href: "/dettes", label: "Dettes", icon: ListTree },
+        { href: "/depenses", label: "Dépenses", icon: ListTree },
+        { href: "/bilan", label: "Centralisation", icon: Scale },
+        { href: "/immobilisations", label: "Équipements", icon: Wrench },
     ]
 
-    const navLinks = allNavLinks.filter(link => !link.adminOnly || isAdmin)
-
-    // Liens affichés avant l'approvisionnement, puis ceux affichés après
-    const liensAvant = navLinks.filter(({ label }) => label === "Observation" || label === "Produit")
-    const liensApres = navLinks.filter(({ label }) => label !== "Observation" && label !== "Produit")
-
-    // Seul l'assureur a un lien de gestion ; le propriétaire n'en a plus
-    const liensGestion = [{ href: "/assureur", label: "Mes clients", icon: Users }]
+    // Seul l'agentvendeur a un lien de gestion ; le propriétaire n'en a plus
+    const liensGestion = [{ href: "/agentvendeur", label: "Mes clients", icon: Users }]
 
     useEffect(() => {
         setMenuOpen(false)
@@ -122,7 +126,7 @@ const Navbar = () => {
             })
     }, [isLoaded, userId])
 
-    // Redirection au démarrage : propriétaire -> /owner, assureur -> /assureur, client -> reste sur /,
+    // Redirection au démarrage : propriétaire -> /owner, agentvendeur -> /agentvendeur, client -> reste sur /,
     // compte pas encore rattaché -> /inscription
     useEffect(() => {
         if (!acces) return
@@ -132,7 +136,7 @@ const Navbar = () => {
         }
         if (pathname !== '/') return
         if (acces.type === 'owner') router.replace('/owner')
-        else if (acces.type === 'assureur') router.replace('/assureur')
+        else if (acces.type === 'agentvendeur') router.replace('/agentvendeur')
     }, [acces, pathname, router])
 
     // Après connexion : donne le rôle admin au titulaire d'un compte client qui n'a pas encore de rôle
@@ -158,7 +162,7 @@ const Navbar = () => {
                     <span className='truncate text-lg font-bold md:text-xl'>{titre}</span>
                 </div>
                 <div className='flex shrink-0 items-center gap-2'>
-                    {(mode === 'assureur' || mode === 'client') && (
+                    {(mode === 'agentvendeur' || mode === 'client') && (
                         <button
                             className='btn btn-sm btn-ghost md:hidden'
                             onClick={() => setMenuOpen((prev) => !prev)}
@@ -173,11 +177,8 @@ const Navbar = () => {
                 </div>
             </div>
 
-            {accesCharge && mode === 'assureur' && (
-                <nav
-                    aria-label='Navigation principale'
-                    className={`${menuOpen ? 'mt-2 grid grid-cols-3 gap-1' : 'hidden'} md:mt-1 md:flex md:flex-row md:flex-nowrap md:items-center md:gap-0.5`}
-                >
+            {accesCharge && mode === 'agentvendeur' && (
+                <nav aria-label='Navigation principale' className={classeNav(menuOpen)}>
                     {liensGestion.map(({ href, label, icon: Icon }) => (
                         <Link
                             href={href}
@@ -185,7 +186,7 @@ const Navbar = () => {
                             aria-current={pathname === href ? 'page' : undefined}
                             className={styleLien(pathname === href)}
                         >
-                            <Icon className='h-4 w-4' />
+                            <Icon className={classeIcone} />
                             {label}
                         </Link>
                     ))}
@@ -194,63 +195,59 @@ const Navbar = () => {
 
             {accesCharge && mode === 'client' && (
                 <>
-                    {/* Une seule ligne sur ordinateur. Sur téléphone, grille de 12 colonnes avec un ordre
-                        et une largeur propres à chaque lien (classes order-N et col-span-N). */}
-                    <nav
-                        aria-label='Navigation principale'
-                        className={`${menuOpen ? 'mt-2 grid grid-cols-12 gap-1' : 'hidden'} md:mt-1 md:flex md:flex-row md:flex-nowrap md:items-center md:gap-0.5`}
-                    >
-                        {liensAvant.map(({ href, label, icon: Icon, phoneClass, compact }) => (
+                    {/* Téléphone : liens à gauche, un sous l'autre. Ordinateur : une seule ligne centrée. */}
+                    <nav aria-label='Navigation principale' className={classeNav(menuOpen)}>
+                        {liensAvant.map(({ href, label, icon: Icon }) => (
                             <Link
                                 href={href}
                                 key={href}
                                 aria-current={pathname === href ? 'page' : undefined}
-                                className={`${styleLien(pathname === href)} ${phoneClass} md:order-none`}
+                                className={styleLien(pathname === href)}
                             >
-                                <Icon className={compact ? 'hidden h-4 w-4 min-[480px]:block' : 'h-4 w-4'} />
+                                <Icon className={classeIcone} />
                                 {label}
                             </Link>
                         ))}
                         <button
                             type='button'
-                            className={`${styleLien(false)} order-3 col-span-4 md:order-none`}
+                            className={styleLien(false)}
                             onClick={() => (document.getElementById('my_modal_stock') as HTMLDialogElement).showModal()}
                         >
-                            <Warehouse className='h-4 w-4' />
+                            <Warehouse className={classeIcone} />
                             Approvisionnement
                         </button>
-                        {liensApres.map(({ href, label, icon: Icon, phoneClass, compact }) => (
+                        {liensApres.map(({ href, label, icon: Icon }) => (
                             <Link
                                 href={href}
                                 key={href}
                                 aria-current={pathname === href ? 'page' : undefined}
-                                className={`${styleLien(pathname === href)} ${phoneClass} md:order-none`}
+                                className={styleLien(pathname === href)}
                             >
-                                <Icon className={compact ? 'hidden h-4 w-4 min-[480px]:block' : 'h-4 w-4'} />
+                                <Icon className={classeIcone} />
                                 {label}
                             </Link>
                         ))}
-
-                        <Link
-                            href="/bilan"
-                            aria-label="Centralisation"
-                            aria-current={pathname === '/bilan' ? 'page' : undefined}
-                            className={`${styleLien(pathname === '/bilan')} order-9 col-span-4 md:order-none`}
-                        >
-                            <Scale className='h-4 w-4' />
-                            Centralisation
-                        </Link>
                         {isAdmin && (
                             <Link
                                 href="/admin"
                                 aria-label="Utilisateurs"
                                 aria-current={pathname === '/admin' ? 'page' : undefined}
-                                className={`${styleLien(pathname === '/admin')} order-10 col-span-4 md:order-none`}
+                                className={styleLien(pathname === '/admin')}
                             >
-                                <Users className='h-4 w-4' />
+                                <Users className={classeIcone} />
                                 Utilisateurs
                             </Link>
                         )}
+                        {/* Abonnement : administrateur et caissier peuvent payer à l'avance ; les mois s'ajoutent à la fin de l'abonnement en cours */}
+                        <Link
+                            href="/abonnement"
+                            aria-label="Abonnement"
+                            aria-current={pathname === '/abonnement' ? 'page' : undefined}
+                            className={styleLien(pathname === '/abonnement')}
+                        >
+                            <CreditCard className={classeIcone} />
+                            Abonnement
+                        </Link>
                     </nav>
 
                     <Stock />

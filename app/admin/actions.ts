@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 import { clerkClient, currentUser } from '@clerk/nextjs/server'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
@@ -172,16 +172,16 @@ export async function inviteUser(email: string, role: 'admin' | 'caissier'): Pro
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adresse)) throw new ErreurMetier("Email invalide.")
     if (!roleValide(role)) throw new ErreurMetier("Rôle invalide.")
 
-    // Un email n'appartient qu'à une seule entreprise (ou assureur)
-    const [titulaire, membreExistant, utilisateurAssureur] = await Promise.all([
+    // Un email n'appartient qu'à une seule entreprise (ou agentvendeur)
+    const [titulaire, membreExistant, utilisateurAgentVendeur] = await Promise.all([
       prisma.businessbi.findUnique({ where: { email: adresse }, select: { id: true } }),
       prisma.membreBusinessbi.findUnique({ where: { email: adresse }, select: { businessbiId: true } }),
-      prisma.assureurUser.findUnique({ where: { email: adresse }, select: { id: true } })
+      prisma.agentvendeurUser.findUnique({ where: { email: adresse }, select: { id: true } })
     ])
     if (titulaire?.id === businessbiId || membreExistant?.businessbiId === businessbiId) {
       throw new ErreurMetier("Cet utilisateur fait déjà partie de votre équipe.")
     }
-    if (titulaire || membreExistant || utilisateurAssureur) {
+    if (titulaire || membreExistant || utilisateurAgentVendeur) {
       throw new ErreurMetier("Cet email est déjà utilisé par un autre compte.")
     }
 

@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { resoudreAcces, type Acces } from '@/lib/acces';
 import { accesAvecCache } from '@/lib/acces-cache';
 
-const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sign-up(.*)', '/acces-refuse(.*)']);
+// /api/webhooks : appelé par Lumicash (pas de session Clerk), protégé par LUMICASH_WEBHOOK_SECRET
+const isPublicRoute = createRouteMatcher([
+  '/sign-in(.*)',
+  '/sign-up(.*)',
+  '/acces-refuse(.*)',
+  '/api/webhooks(.*)',
+]);
 
 // Routes réservées aux administrateurs du client (role === "admin" dans publicMetadata)
 const isAdminRoute = createRouteMatcher(['/centralisation(.*)', '/admin(.*)']);
@@ -11,11 +17,14 @@ const isAdminRoute = createRouteMatcher(['/centralisation(.*)', '/admin(.*)']);
 // Zone propriétaires de l'application
 const isOwnerRoute = createRouteMatcher(['/owner(.*)', '/api/owner(.*)']);
 
-// Zone assureurs
-const isAssureurRoute = createRouteMatcher(['/assureur(.*)', '/api/assureur(.*)']);
+// Zone agentvendeurs
+const isAgentVendeurRoute = createRouteMatcher(['/agentvendeur(.*)', '/api/agentvendeur(.*)']);
 
-// Page où un nouveau compte saisit le code de son assureur
+// Page où un nouveau compte saisit le code de son agentvendeur
 const isInscriptionRoute = createRouteMatcher(['/inscription(.*)']);
+
+// Seules routes accessibles à un client dont l'abonnement a expiré : payer pour le renouveler
+const isAbonnementRoute = createRouteMatcher(['/abonnement(.*)', '/api/paiements(.*)']);
 
 const estApi = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api');
 
@@ -43,7 +52,7 @@ function versSaZone(
     return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
   }
   const accueil =
-    acces.type === 'owner' ? '/owner' : acces.type === 'assureur' ? '/assureur' : '/';
+    acces.type === 'owner' ? '/owner' : acces.type === 'agentvendeur' ? '/agentvendeur' : '/';
   return NextResponse.redirect(new URL(accueil, request.url));
 }
 
@@ -70,7 +79,7 @@ export default clerkMiddleware(async (auth, request) => {
     }
   }
 
-  // Contrôle d'accès : propriétaire / assureur / client / compte à enregistrer
+  // Contrôle d'accès : propriétaire / agentvendeur / client / compte à enregistrer
   try {
     const { userId } = await auth();
     if (!userId) return;
@@ -79,7 +88,7 @@ export default clerkMiddleware(async (auth, request) => {
 
     if (acces.type === 'refuse') return refuser(request, acces.motif);
 
-    // Compte pas encore rattaché à un assureur : seule la page d'inscription est accessible
+    // Compte pas encore rattaché à un agentvendeur : seule la page d'inscription est accessible
     if (acces.type === 'inscription') {
       if (isInscriptionRoute(request)) return;
       return versInscription(request);
@@ -93,17 +102,29 @@ export default clerkMiddleware(async (auth, request) => {
       return;
     }
 
-    if (isAssureurRoute(request)) {
-      if (acces.type !== 'assureur') return versSaZone(request, acces);
+    if (isAgentVendeurRoute(request)) {
+      if (acces.type !== 'agentvendeur') return versSaZone(request, acces);
       return;
     }
 
     // Reste de l'application : réservé aux clients
     if (acces.type !== 'client') return versSaZone(request, acces);
+
+    // Abonnement (ou essai) expiré : seule la page de paiement reste accessible
+    if (acces.abonnementFin < Date.now() && !isAbonnementRoute(request)) {
+      if (estApi(request)) {
+        return NextResponse.json(
+          { error: 'Abonnement expiré', motif: 'abonnement-expire' },
+          { status: 403 }
+        );
+      }
+      // Administrateur et caissier sont envoyés vers la page de paiement
+      return NextResponse.redirect(new URL('/abonnement', request.url));
+    }
   } catch (error) {
     console.error('Erreur vérification accès (proxy):', error);
     // Zones sensibles : en cas d'erreur on bloque.
-    if (isOwnerRoute(request) || isAssureurRoute(request)) {
+    if (isOwnerRoute(request) || isAgentVendeurRoute(request)) {
       return refuser(request, 'erreur');
     }
     // Zone client : en cas de coupure réseau/DB, on laisse passer plutôt que de

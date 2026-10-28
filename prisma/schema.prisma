@@ -9,33 +9,35 @@ datasource db {
 }
 
 model Businessbi {
-  id               String           @id @default(uuid())
-  name             String
-  email            String?          @unique
-  telephone        String?          @unique
-  assureurId       String?
-  assureur         Assureur?        @relation(fields: [assureurId], references: [id])
-  numeroPolice     String?          // affiché "RC" dans l'application
-  nif              String?
-  secteurActivite  String?
-  proprietaire     String?
-  telephoneContact String?          // téléphone saisi à l'inscription (contact), distinct de telephone (identifiant de connexion)
-  accesActif       Boolean          @default(true)
-  products         Product[]
-  transactions     Transaction[]
-  mouvementsStock  MouvementStock[]
-  depenses         Depense[]
-  dettes           Dette[]
-  caisseEntries    CaisseEntry[]
-  banqueEntries    BanqueEntry[]
-  ventes           Vente[]
-  categories       Categorie[]
-  immobilisations  Immobilisation[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  membres          MembreBusinessbi[]
+  id                  String               @id @default(uuid())
+  name                String
+  email               String?              @unique
+  telephone           String?              @unique
+  agentvendeurId      String?              @map("assureurId")
+  agentvendeur        Agentvendeur?        @relation(fields: [agentvendeurId], references: [id])
+  numeroPolice        String? // affiché "RC" dans l'application
+  nif                 String?
+  secteurActivite     String?
+  proprietaire        String?
+  telephoneContact    String? // téléphone saisi à l'inscription (contact), distinct de telephone (identifiant de connexion)
+  accesActif          Boolean              @default(true)
+  products            Product[]
+  transactions        Transaction[]
+  mouvementsStock     MouvementStock[]
+  depenses            Depense[]
+  dettes              Dette[]
+  caisseEntries       CaisseEntry[]
+  banqueEntries       BanqueEntry[]
+  ventes              Vente[]
+  categories          Categorie[]
+  immobilisations     Immobilisation[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  membres             MembreBusinessbi[]
+  abonnement          Abonnement?
+  paiementsAbonnement PaiementAbonnement[]
 
-  @@index([assureurId])
+  @@index([agentvendeurId])
 }
 
 // Utilisateur d'une entreprise cliente (admin ou caissier), ajouté par l'administrateur de cette entreprise
@@ -53,34 +55,74 @@ model MembreBusinessbi {
   @@index([businessbiId])
 }
 
-// Compagnie d'assurance (ou agence) : créée et gérée par les propriétaires de l'application
-model Assureur {
-  id           String         @id @default(uuid())
-  code         String         @unique
-  nom          String
-  email        String?        @unique
-  telephone    String?
-  actif        Boolean        @default(true)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  clients      Businessbi[]
-  utilisateurs AssureurUser[]
+// Abonnement d'une entreprise cliente (une seule ligne par entreprise)
+// statut : "essai" | "actif" | "expire"
+// plan : "mensuel" | "trimestriel" | "semestriel" | "annuel" (voir lib/plans.ts), null pendant l'essai
+model Abonnement {
+  id           String     @id @default(uuid())
+  businessbiId String     @unique
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id], onDelete: Cascade)
+  statut       String     @default("essai")
+  plan         String?
+  dateDebut    DateTime   @default(now())
+  dateFin      DateTime
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
-// Utilisateur d'un assureur. Créé avec un email et/ou un téléphone ; clerkUserId est rempli à la première connexion
-// role : "ADMIN" (gère ses clients) | "LECTEUR" (consultation des stocks)
-model AssureurUser {
-  id          String   @id @default(uuid())
-  email       String?  @unique
-  telephone   String?  @unique
-  clerkUserId String?  @unique
-  assureurId  String
-  assureur    Assureur @relation(fields: [assureurId], references: [id])
-  nom         String?
-  role        String   @default("ADMIN")
-  createdAt   DateTime @default(now())
+// Paiement d'abonnement (Lumicash). codeTrans = référence unique envoyée à Lumicash
+// statut : "en_attente" | "confirme" | "rejete"
+model PaiementAbonnement {
+  id           String     @id @default(uuid())
+  businessbiId String
+  businessbi   Businessbi @relation(fields: [businessbiId], references: [id], onDelete: Cascade)
+  provider     String
+  plan         String
+  montant      Float
+  codeTrans    String     @unique
+  telephone    String?
+  numeroCompte String?
+  statut       String     @default("en_attente")
+  rawPayload   Json?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@index([assureurId])
+  @@index([businessbiId, createdAt])
+}
+
+// Agent vendeur (ex-assureur) : créé et géré par les propriétaires de l'application.
+// La table garde son nom en base ("Assureur") pour ne perdre aucune donnée.
+model Agentvendeur {
+  id           String             @id @default(uuid())
+  code         String             @unique
+  nom          String
+  email        String?            @unique
+  telephone    String?
+  actif        Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  clients      Businessbi[]
+  utilisateurs AgentvendeurUser[]
+
+  @@map("Assureur")
+}
+
+// Utilisateur d'un agent vendeur. Créé avec un email et/ou un téléphone ; clerkUserId est rempli à la première connexion
+// role : "ADMIN" (gère ses clients) | "LECTEUR" (consultation des stocks)
+// La table garde son nom en base ("AssureurUser").
+model AgentvendeurUser {
+  id             String       @id @default(uuid())
+  email          String?      @unique
+  telephone      String?      @unique
+  clerkUserId    String?      @unique
+  agentvendeurId String       @map("assureurId")
+  agentvendeur   Agentvendeur @relation(fields: [agentvendeurId], references: [id])
+  nom            String?
+  role           String       @default("ADMIN")
+  createdAt      DateTime     @default(now())
+
+  @@index([agentvendeurId])
+  @@map("AssureurUser")
 }
 
 model Product {
@@ -110,8 +152,8 @@ model Transaction {
   prixAchat    Float      @default(0)
   prixVente    Float      @default(0)
   dateApprovis DateTime   @default(now())
-  factureUrl   String?    // photo de la facture d'achat (facultative), stockée sur Vercel Blob
-  venteId      String?    // pour les sorties (OUT) : id de la vente qui a produit cette ligne (permet d'annuler la vente en entier)
+  factureUrl   String? // photo de la facture d'achat (facultative), stockée sur Vercel Blob
+  venteId      String? // pour les sorties (OUT) : id de la vente qui a produit cette ligne (permet d'annuler la vente en entier)
   productId    String
   businessbiId String
   createdAt    DateTime   @default(now())
@@ -185,7 +227,7 @@ model Dette {
   description  String
   dateEcheance DateTime?
   statut       String     @default("en_cours")
-  venteId      String?    // dette créée par une vente non soldée : id de cette vente
+  venteId      String? // dette créée par une vente non soldée : id de cette vente
   businessbiId String
   businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
   paiements    Paiement[]
@@ -264,15 +306,15 @@ model Vente {
 }
 
 model VenteItem {
-  id          String  @id @default(cuid())
+  id          String @id @default(cuid())
   venteId     String
-  vente       Vente   @relation(fields: [venteId], references: [id], onDelete: Cascade)
+  vente       Vente  @relation(fields: [venteId], references: [id], onDelete: Cascade)
   productId   String
   productName String
   quantity    Int
   unit        String
   prixVente   Float
-  prixAchat   Float   @default(0)
+  prixAchat   Float  @default(0)
 
   @@index([venteId])
 }
@@ -280,8 +322,8 @@ model VenteItem {
 model Categorie {
   id           String     @id @default(cuid())
   nom          String
-  module       String     // "CAISSE" | "BANQUE"
-  type         String     // "DEBIT" | "CREDIT"
+  module       String // "CAISSE" | "BANQUE"
+  type         String // "DEBIT" | "CREDIT"
   businessbiId String
   businessbi   Businessbi @relation(fields: [businessbiId], references: [id])
   createdAt    DateTime   @default(now())

@@ -3,7 +3,7 @@
 // Sans cela, proxy.ts appelait Clerk (et la base de données) à CHAQUE requête, y compris à chaque
 // appel serveur d'une page : environ 2,5 s d'attente par appel depuis Bujumbura.
 //
-// - Seuls les accès valides (propriétaire, assureur, client) sont gardés. Un compte « à inscrire » ou
+// - Seuls les accès valides (propriétaire, agentvendeur, client) sont gardés. Un compte « à inscrire » ou
 //   « refusé » est toujours revérifié : une inscription ou une réactivation prend effet tout de suite.
 // - Plusieurs requêtes simultanées du même utilisateur partagent une seule vérification.
 // - Une suspension peut mettre jusqu'à DUREE_CACHE_MS à bloquer l'accès aux PAGES ; les données restent

@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import { useAuth, useUser } from '@clerk/nextjs'
 import Wrapper from '../components/Wrapper'
-import { rejoindreAssureur } from '../actions-inscription'
+import { rejoindreAgentVendeur } from '../actions-inscription'
 
 const page = () => {
   const { user } = useUser()
@@ -20,15 +20,10 @@ const page = () => {
   const valider = async () => {
     setErreur('')
 
-    // Tous les champs sont obligatoires
+    // Seuls le code de l'agentvendeur et le nom de l'entreprise sont obligatoires
     const manquants: string[] = []
-    if (!code.trim()) manquants.push("le code de l'assureur")
+    if (!code.trim()) manquants.push("le code de l'agentvendeur")
     if (!name.trim()) manquants.push("le nom de l'entreprise")
-    if (!rc.trim()) manquants.push('le RC')
-    if (!nif.trim()) manquants.push('le NIF')
-    if (!secteurActivite.trim()) manquants.push("le secteur d'activité")
-    if (!proprietaire.trim()) manquants.push('le propriétaire')
-    if (!telephone.trim()) manquants.push('le téléphone')
     if (manquants.length > 0) {
       setErreur(`Veuillez renseigner : ${manquants.join(', ')}.`)
       return
@@ -36,7 +31,7 @@ const page = () => {
 
     setEnCours(true)
     try {
-      const res = await rejoindreAssureur({
+      const res = await rejoindreAgentVendeur({
         code,
         name,
         rc,
@@ -64,16 +59,16 @@ const page = () => {
   return (
     <Wrapper>
       <div className='max-w-2xl mx-auto -mt-4 space-y-2 font-bold'>
-        <h1 className='text-base font-bold text-error'>REJOINDRE MON ASSUREUR</h1>
+        <h1 className='text-base font-bold text-error'>REJOINDRE MON AGENTVENDEUR</h1>
 
         <div className='border-2 border-base-200 rounded-3xl p-3 space-y-2'>
           <p className='text-[11px] text-gray-600 normal-case font-bold'>
-            Saisissez le code de votre assureur et les informations de votre entreprise. Tous les champs sont obligatoires.
+            Saisissez le code de votre agentvendeur et le nom de votre entreprise. Les autres informations sont facultatives.
           </p>
 
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2'>
             <div className='flex flex-col gap-0.5 sm:col-span-2'>
-              <label className='text-[11px] font-bold uppercase'>Code de l&apos;assureur *</label>
+              <label className='text-[11px] font-bold uppercase'>Code de l&apos;agentvendeur *</label>
               <input
                 type='text'
                 className='input input-bordered input-sm w-full font-bold uppercase tracking-widest'
@@ -97,56 +92,51 @@ const page = () => {
             </div>
 
             <div className='flex flex-col gap-0.5'>
-              <label className='text-[11px] font-bold uppercase'>RC *</label>
+              <label className='text-[11px] font-bold uppercase'>RC</label>
               <input
                 type='text'
                 className='input input-bordered input-sm w-full font-bold'
-                required
                 value={rc}
                 onChange={(e) => setRc(e.target.value)}
               />
             </div>
 
             <div className='flex flex-col gap-0.5'>
-              <label className='text-[11px] font-bold uppercase'>NIF *</label>
+              <label className='text-[11px] font-bold uppercase'>NIF</label>
               <input
                 type='text'
                 className='input input-bordered input-sm w-full font-bold'
-                required
                 value={nif}
                 onChange={(e) => setNif(e.target.value)}
               />
             </div>
 
             <div className='flex flex-col gap-0.5'>
-              <label className='text-[11px] font-bold uppercase'>Secteur d&apos;activité *</label>
+              <label className='text-[11px] font-bold uppercase'>Secteur d&apos;activité</label>
               <input
                 type='text'
                 className='input input-bordered input-sm w-full font-bold'
-                required
                 value={secteurActivite}
                 onChange={(e) => setSecteurActivite(e.target.value)}
               />
             </div>
 
             <div className='flex flex-col gap-0.5'>
-              <label className='text-[11px] font-bold uppercase'>Propriétaire *</label>
+              <label className='text-[11px] font-bold uppercase'>Propriétaire</label>
               <input
                 type='text'
                 className='input input-bordered input-sm w-full font-bold'
-                required
                 value={proprietaire}
                 onChange={(e) => setProprietaire(e.target.value)}
               />
             </div>
 
             <div className='flex flex-col gap-0.5 sm:col-span-2'>
-              <label className='text-[11px] font-bold uppercase'>Téléphone *</label>
+              <label className='text-[11px] font-bold uppercase'>Téléphone</label>
               <input
                 type='tel'
                 className='input input-bordered input-sm w-full font-bold'
                 placeholder='+257...'
-                required
                 value={telephone}
                 onChange={(e) => setTelephone(e.target.value)}
               />

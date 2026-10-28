@@ -8,7 +8,7 @@ import { executer } from "@/lib/resultat"
 import { withRetry } from "@/lib/retry"
 import { accesAvecCache } from "@/lib/acces-cache"
 
-const ROLES_ASSUREUR = ["ADMIN", "LECTEUR"]
+const ROLES_AGENTVENDEUR = ["ADMIN", "LECTEUR"]
 
 // Toutes les fonctions de ce fichier sont réservées aux propriétaires de l'application
 // (emails listés dans SUPER_ADMIN_EMAILS). L'identité est lue côté serveur (Clerk).
@@ -22,7 +22,7 @@ async function exigerOwner() {
     }
 }
 
-function genererCodeAssureur(nom: string): string {
+function genererCodeAgentVendeur(nom: string): string {
     const prefixe = nom
         .trim()
         .toUpperCase()
@@ -32,11 +32,11 @@ function genererCodeAssureur(nom: string): string {
     return `${prefixe}${suffixe}`
 }
 
-// Liste des assureurs avec leurs utilisateurs et leur nombre de clients
-export async function getAssureurs() {
+// Liste des agentvendeurs avec leurs utilisateurs et leur nombre de clients
+export async function getAgentVendeurs() {
     await exigerOwner()
-    const assureurs = await withRetry(() =>
-        prisma.assureur.findMany({
+    const agentvendeurs = await withRetry(() =>
+        prisma.agentvendeur.findMany({
             include: {
                 _count: { select: { clients: true } },
                 utilisateurs: {
@@ -54,7 +54,7 @@ export async function getAssureurs() {
             orderBy: { nom: "asc" }
         })
     )
-    return assureurs.map(a => ({
+    return agentvendeurs.map(a => ({
         id: a.id,
         code: a.code,
         nom: a.nom,
@@ -74,8 +74,8 @@ export async function getAssureurs() {
     }))
 }
 
-// Crée un assureur avec son premier administrateur (identifié par email et/ou téléphone)
-export async function creerAssureur(data: {
+// Crée un agentvendeur avec son premier administrateur (identifié par email et/ou téléphone)
+export async function creerAgentVendeur(data: {
     nom: string
     email?: string
     telephone?: string
@@ -85,22 +85,22 @@ export async function creerAssureur(data: {
         await exigerOwner()
 
         const nom = data.nom?.trim()
-        if (!nom) throw new Error("Le nom de l'assureur est requis.")
+        if (!nom) throw new Error("Le nom de l'agentvendeur est requis.")
 
         const contact = nettoyerContact(data.email, data.telephone)
         await verifierIdentifiantsLibres(contact)
 
-        let code = genererCodeAssureur(nom)
+        let code = genererCodeAgentVendeur(nom)
         let tentative = 0
-        while (await prisma.assureur.findUnique({ where: { code } })) {
+        while (await prisma.agentvendeur.findUnique({ where: { code } })) {
             tentative++
-            code = genererCodeAssureur(nom)
+            code = genererCodeAgentVendeur(nom)
             if (tentative > 10) throw new Error("Impossible de générer un code unique, réessayez.")
         }
 
-        const assureur = await withRetry(() =>
+        const agentvendeur = await withRetry(() =>
             prisma.$transaction(async (tx) => {
-                const nouvelAssureur = await tx.assureur.create({
+                const nouvelAgentVendeur = await tx.agentvendeur.create({
                     data: {
                         code,
                         nom,
@@ -108,53 +108,53 @@ export async function creerAssureur(data: {
                         telephone: contact.telephone
                     }
                 })
-                await tx.assureurUser.create({
+                await tx.agentvendeurUser.create({
                     data: {
-                        assureurId: nouvelAssureur.id,
+                        agentvendeurId: nouvelAgentVendeur.id,
                         email: contact.email,
                         telephone: contact.telephone,
                         nom: data.adminNom?.trim() || null,
                         role: "ADMIN"
                     }
                 })
-                return nouvelAssureur
+                return nouvelAgentVendeur
             })
         )
-        return { id: assureur.id, code: assureur.code, nom: assureur.nom }
+        return { id: agentvendeur.id, code: agentvendeur.code, nom: agentvendeur.nom }
     })
 }
 
-// Suspend ou réactive un assureur : ses utilisateurs et tous ses clients perdent (ou retrouvent) l'accès
-export async function basculerAssureurActif(assureurId: string, actif: boolean) {
+// Suspend ou réactive un agentvendeur : ses utilisateurs et tous ses clients perdent (ou retrouvent) l'accès
+export async function basculerAgentVendeurActif(agentvendeurId: string, actif: boolean) {
     return executer(async () => {
         await exigerOwner()
-        await withRetry(() => prisma.assureur.update({ where: { id: assureurId }, data: { actif } }))
+        await withRetry(() => prisma.agentvendeur.update({ where: { id: agentvendeurId }, data: { actif } }))
     })
 }
 
-// Ajoute un utilisateur à un assureur
-export async function ajouterUtilisateurAssureur(
-    assureurId: string,
+// Ajoute un utilisateur à un agentvendeur
+export async function ajouterUtilisateurAgentVendeur(
+    agentvendeurId: string,
     data: { email?: string; telephone?: string; nom?: string; role?: string }
 ) {
     return executer(async () => {
         await exigerOwner()
 
         const role = data.role ?? "LECTEUR"
-        if (!ROLES_ASSUREUR.includes(role)) throw new Error("Rôle invalide.")
+        if (!ROLES_AGENTVENDEUR.includes(role)) throw new Error("Rôle invalide.")
 
-        const assureur = await withRetry(() =>
-            prisma.assureur.findUnique({ where: { id: assureurId }, select: { id: true } })
+        const agentvendeur = await withRetry(() =>
+            prisma.agentvendeur.findUnique({ where: { id: agentvendeurId }, select: { id: true } })
         )
-        if (!assureur) throw new Error("Assureur introuvable.")
+        if (!agentvendeur) throw new Error("AgentVendeur introuvable.")
 
         const contact = nettoyerContact(data.email, data.telephone)
         await verifierIdentifiantsLibres(contact)
 
         await withRetry(() =>
-            prisma.assureurUser.create({
+            prisma.agentvendeurUser.create({
                 data: {
-                    assureurId,
+                    agentvendeurId,
                     email: contact.email,
                     telephone: contact.telephone,
                     nom: data.nom?.trim() || null,
@@ -165,26 +165,26 @@ export async function ajouterUtilisateurAssureur(
     })
 }
 
-// Retire un utilisateur d'un assureur (jamais le dernier : l'assureur doit garder un accès)
-export async function supprimerUtilisateurAssureur(utilisateurId: string) {
+// Retire un utilisateur d'un agentvendeur (jamais le dernier : l'agentvendeur doit garder un accès)
+export async function supprimerUtilisateurAgentVendeur(utilisateurId: string) {
     return executer(async () => {
         await exigerOwner()
 
         const utilisateur = await withRetry(() =>
-            prisma.assureurUser.findUnique({ where: { id: utilisateurId } })
+            prisma.agentvendeurUser.findUnique({ where: { id: utilisateurId } })
         )
         if (!utilisateur) throw new Error("Utilisateur introuvable.")
 
         const nombre = await withRetry(() =>
-            prisma.assureurUser.count({ where: { assureurId: utilisateur.assureurId } })
+            prisma.agentvendeurUser.count({ where: { agentvendeurId: utilisateur.agentvendeurId } })
         )
-        if (nombre <= 1) throw new Error("Impossible de supprimer le seul utilisateur de cet assureur.")
+        if (nombre <= 1) throw new Error("Impossible de supprimer le seul utilisateur de cet agentvendeur.")
 
-        await withRetry(() => prisma.assureurUser.delete({ where: { id: utilisateurId } }))
+        await withRetry(() => prisma.agentvendeurUser.delete({ where: { id: utilisateurId } }))
     })
 }
 
-// Tous les clients, avec leur assureur (pour rattacher les clients existants)
+// Tous les clients, avec leur agentvendeur (pour rattacher les clients existants)
 export async function getClientsOwner() {
     await exigerOwner()
     const clients = await withRetry(() =>
@@ -196,7 +196,7 @@ export async function getClientsOwner() {
                 telephone: true,
                 numeroPolice: true,
                 accesActif: true,
-                assureur: { select: { id: true, nom: true, code: true } }
+                agentvendeur: { select: { id: true, nom: true, code: true } }
             },
             orderBy: { name: "asc" }
         })
@@ -208,33 +208,33 @@ export async function getClientsOwner() {
         telephone: c.telephone,
         numeroPolice: c.numeroPolice,
         accesActif: c.accesActif,
-        assureurId: c.assureur?.id ?? null,
-        assureurNom: c.assureur?.nom ?? null,
-        assureurCode: c.assureur?.code ?? null
+        agentvendeurId: c.agentvendeur?.id ?? null,
+        agentvendeurNom: c.agentvendeur?.nom ?? null,
+        agentvendeurCode: c.agentvendeur?.code ?? null
     }))
 }
 
-// Rattache un client à un assureur (ou le détache avec assureurId = null)
+// Rattache un client à un agentvendeur (ou le détache avec agentvendeurId = null)
 export async function rattacherClient(
     businessbiId: string,
-    assureurId: string | null,
+    agentvendeurId: string | null,
     numeroPolice?: string
 ) {
     return executer(async () => {
         await exigerOwner()
 
-        if (assureurId) {
-            const assureur = await withRetry(() =>
-                prisma.assureur.findUnique({ where: { id: assureurId }, select: { id: true } })
+        if (agentvendeurId) {
+            const agentvendeur = await withRetry(() =>
+                prisma.agentvendeur.findUnique({ where: { id: agentvendeurId }, select: { id: true } })
             )
-            if (!assureur) throw new Error("Assureur introuvable.")
+            if (!agentvendeur) throw new Error("AgentVendeur introuvable.")
         }
 
         await withRetry(() =>
             prisma.businessbi.update({
                 where: { id: businessbiId },
                 data: {
-                    assureurId,
+                    agentvendeurId,
                     ...(numeroPolice !== undefined ? { numeroPolice: numeroPolice.trim() || null } : {})
                 }
             })

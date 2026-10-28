@@ -59,12 +59,12 @@ async function trouverBusinessbiPourUtilisateur(
 
     return prisma.businessbi.findFirst({
         where: { OR: filtre },
-        include: { assureur: { select: { actif: true } } }
+        include: { agentvendeur: { select: { actif: true } } }
     })
 }
 
 // Appelée après la connexion. Ne crée plus aucun compte : les clients sont enregistrés
-// par leur assureur. Si le titulaire d'un compte client n'a encore aucun rôle, il devient "admin"
+// par leur agentvendeur. Si le titulaire d'un compte client n'a encore aucun rôle, il devient "admin"
 // (les membres de son équipe ont le rôle défini par l'administrateur de l'entreprise, enregistré dans la base).
 // L'identité est lue côté serveur (Clerk), jamais depuis les paramètres reçus du navigateur.
 export async function checkAndAddBusinessbi(_email?: string, _name?: string, _userId?: string) {
@@ -128,7 +128,7 @@ export async function checkAndAddBusinessbi(_email?: string, _name?: string, _us
 export async function getOrCreateBusinessbi(_email?: string, _name?: string) {
     const businessbi = await getBusinessbi()
     if (!businessbi) {
-        throw new Error("Compte non enregistré ou accès suspendu. Contactez votre assureur.")
+        throw new Error("Compte non enregistré ou accès suspendu. Contactez votre agentvendeur.")
     }
     return businessbi
 }
@@ -141,7 +141,7 @@ const cacheBusinessbi = new Map<string, { expire: number; valeur: BusinessbiTrou
 const DUREE_CACHE_MS = 30_000
 
 // Renvoie l'entreprise du COMPTE CONNECTÉ (lu côté serveur) si son accès est actif
-// (client non suspendu, assureur non suspendu). Le paramètre est ignoré.
+// (client non suspendu, agentvendeur non suspendu). Le paramètre est ignoré.
 export async function getBusinessbi(_email?: string) {
     try {
         const { userId } = await auth()
@@ -163,7 +163,7 @@ export async function getBusinessbi(_email?: string) {
 
         if (!businessbi) return
         if (!businessbi.accesActif) return
-        if (businessbi.assureur && !businessbi.assureur.actif) return
+        if (businessbi.agentvendeur && !businessbi.agentvendeur.actif) return
         return businessbi
     } catch (error) {
         console.error(error)
@@ -323,7 +323,7 @@ export async function deleteProduct(id: string, email: string) {
             throw new Error("Ce produit a été créé il y a plus de 24h. Sa suppression n'est plus autorisée.")
         }
 
-        // L'historique des sorties de stock est conservé pour les assureurs : un produit déjà vendu ne se supprime plus
+        // L'historique des sorties de stock est conservé pour les agentvendeurs : un produit déjà vendu ne se supprime plus
         const nombreSorties = await prisma.transaction.count({
             where: { productId: id, type: "OUT" }
         })
@@ -769,7 +769,7 @@ export async function getStockSummary(email: string, dateFiltre?: string): Promi
         const businessbi = await getBusinessbi(email)
         if (!businessbi) throw new Error("Aucun Business trouvé avec cet email.")
 
-        // Même calcul que la vue assureur : quantité de base + entrées - sorties jusqu'à la date
+        // Même calcul que la vue agentvendeur : quantité de base + entrées - sorties jusqu'à la date
         const lignes = await calculerStock(businessbi.id, dateFiltre)
         return resumerStock(lignes)
     } catch (error) {
@@ -1119,7 +1119,7 @@ export async function readProductsWithRealQuantity(email: string): Promise<Produ
 }
 
 // Valeur du stock (au prix de vente) à une date, ou actuelle si aucune date.
-// Même calcul que la vue assureur (lib/stock.ts).
+// Même calcul que la vue agentvendeur (lib/stock.ts).
 export async function getValeurStock(email: string, dateFiltre?: string): Promise<number> {
     try {
         if (!email) throw new Error("Email requis")

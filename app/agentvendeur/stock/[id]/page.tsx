@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Wrapper from '../../../components/Wrapper'
-import { getStockClientALaDate } from '../../../actions-assureur'
+import { getStockClientALaDate } from '../../../actions-agentvendeur'
 import { useStockSync } from '@/lib/stock-sync'
 
 type Article = {
@@ -136,7 +136,7 @@ const page = () => {
             >
               IMPRIMER
             </button>
-            <Link href='/assureur' className='btn btn-sm btn-ghost'>
+            <Link href='/agentvendeur' className='btn btn-sm btn-ghost'>
               RETOUR
             </Link>
           </div>

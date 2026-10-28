@@ -1,8 +1,8 @@
 // lib/import-clients.ts
-// Logique pure (sans base de données) de l'import des clients d'un assureur depuis un fichier Excel,
+// Logique pure (sans base de données) de l'import des clients d'un agentvendeur depuis un fichier Excel,
 // et du rapprochement avec la fiche importée au moment de l'inscription du client.
 //
-// Une fiche « en attente » est une fiche importée par l'assureur et jamais utilisée :
+// Une fiche « en attente » est une fiche importée par l'agentvendeur et jamais utilisée :
 // elle n'a ni email ni téléphone de connexion (ils sont renseignés quand le client s'inscrit).
 
 export type LigneImport = { ligne: number; nom: string; rc: string; nif: string }
@@ -91,7 +91,7 @@ export type ResultatRecherche =
   | { type: "nif_different" }
   | { type: "a_completer"; id: string }
 
-// À l'inscription : le client a-t-il déjà une fiche importée par son assureur (même RC, même NIF) ?
+// À l'inscription : le client a-t-il déjà une fiche importée par son agentvendeur (même RC, même NIF) ?
 export function chercherFicheImportee(rc: string, nif: string, existants: ClientExistant[]): ResultatRecherche {
   const cle = normaliserCle(rc)
   const memeRc = existants.filter((c) => c.numeroPolice && normaliserCle(c.numeroPolice) === cle)

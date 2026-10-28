@@ -4,19 +4,24 @@ const MESSAGES: Record<string, { titre: string; texte: string }> = {
   'non-enregistre': {
     titre: 'Compte non reconnu',
     texte:
-      "Votre email ou votre numéro de téléphone n'est pas enregistré. Contactez votre assureur pour obtenir l'accès.",
+      "Votre email ou votre numéro de téléphone n'est pas enregistré. Contactez votre agentvendeur pour obtenir l'accès.",
   },
   'client-suspendu': {
     titre: 'Accès suspendu',
-    texte: 'Votre accès a été suspendu. Contactez votre assureur.',
+    texte: 'Votre accès a été suspendu. Contactez votre agentvendeur.',
   },
-  'assureur-suspendu': {
+  'agentvendeur-suspendu': {
     titre: 'Accès suspendu',
-    texte: "Le compte de votre assureur est suspendu. Contactez-le pour rétablir l'accès.",
+    texte: "Le compte de votre agentvendeur est suspendu. Contactez-le pour rétablir l'accès.",
   },
-  'sans-assureur': {
+  'sans-agentvendeur': {
     titre: 'Accès non activé',
-    texte: "Votre compte n'est rattaché à aucun assureur. Contactez votre assureur.",
+    texte: "Votre compte n'est rattaché à aucun agentvendeur. Contactez votre agentvendeur.",
+  },
+  'abonnement-expire': {
+    titre: 'Abonnement expiré',
+    texte:
+      "L'abonnement de votre entreprise a expiré. Demandez à l'administrateur de votre entreprise de le renouveler.",
   },
   erreur: {
     titre: 'Vérification impossible',

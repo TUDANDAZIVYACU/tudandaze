@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import Wrapper from '../../../components/Wrapper'
-import { getVariationStockClient } from '../../../actions-assureur'
+import { getVariationStockClient } from '../../../actions-agentvendeur'
 import { useStockSync } from '@/lib/stock-sync'
 
 type ArticleVariation = {
@@ -168,7 +168,7 @@ const page = () => {
             >
               IMPRIMER
             </button>
-            <Link href='/assureur' className='btn btn-sm btn-ghost'>
+            <Link href='/agentvendeur' className='btn btn-sm btn-ghost'>
               RETOUR
             </Link>
           </div>

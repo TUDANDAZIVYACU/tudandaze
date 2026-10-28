@@ -34,7 +34,7 @@ export async function createImmobilisation(
     return executer(async () => {
         if (!email) throw new Error("Identifiant requis.")
         const businessbi = await getBusinessbi(email)
-        if (!businessbi) throw new Error("Compte non enregistré ou accès suspendu. Contactez votre assureur.")
+        if (!businessbi) throw new Error("Compte non enregistré ou accès suspendu. Contactez votre agentvendeur.")
 
         const designation = data.designation?.trim()
         if (!designation) throw new Error("La désignation de l'équipement est requise.")

@@ -18,11 +18,11 @@ export function nettoyerContact(email?: string | null, telephone?: string | null
     return { email: e, telephone: t }
 }
 
-// Vérifie qu'aucun client ni utilisateur d'assureur n'utilise déjà cet email / ce téléphone.
+// Vérifie qu'aucun client ni utilisateur d'agentvendeur n'utilise déjà cet email / ce téléphone.
 // Un même identifiant ne doit jamais désigner deux comptes, sinon l'accès serait ambigu.
 export async function verifierIdentifiantsLibres(
     contact: Contact,
-    exclure?: { businessbiId?: string; assureurUserId?: string }
+    exclure?: { businessbiId?: string; agentvendeurUserId?: string }
 ) {
     const filtre = [
         ...(contact.email ? [{ email: contact.email }] : []),
@@ -38,10 +38,10 @@ export async function verifierIdentifiantsLibres(
             },
             select: { id: true }
         }),
-        prisma.assureurUser.findFirst({
+        prisma.agentvendeurUser.findFirst({
             where: {
                 OR: filtre,
-                ...(exclure?.assureurUserId ? { id: { not: exclure.assureurUserId } } : {})
+                ...(exclure?.agentvendeurUserId ? { id: { not: exclure.agentvendeurUserId } } : {})
             },
             select: { id: true }
         })

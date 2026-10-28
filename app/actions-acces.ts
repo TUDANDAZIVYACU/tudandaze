@@ -21,16 +21,16 @@ export async function getMonAcces() {
         if (acces.type === "inscription") return { type: "inscription" as const }
         if (acces.type === "refuse") return { type: "refuse" as const, motif: acces.motif }
 
-        const assureur = await withRetry(() =>
-            prisma.assureur.findUnique({
-                where: { id: acces.assureurId },
+        const agentvendeur = await withRetry(() =>
+            prisma.agentvendeur.findUnique({
+                where: { id: acces.agentvendeurId },
                 select: { nom: true }
             })
         )
         return {
-            type: "assureur" as const,
+            type: "agentvendeur" as const,
             role: acces.role,
-            nom: assureur?.nom ?? "ASSUREUR"
+            nom: agentvendeur?.nom ?? "AGENTVENDEUR"
         }
     } catch (error) {
         console.error(error)
@@ -41,7 +41,7 @@ export async function getMonAcces() {
 export type NavbarInfo = {
     acces:
         | { type: "owner" }
-        | { type: "assureur"; role: string; nom: string }
+        | { type: "agentvendeur"; role: string; nom: string }
         | { type: "client" }
         | { type: "inscription" }
         | { type: "refuse"; motif: string }
@@ -68,14 +68,14 @@ export async function getNavbarInfo(): Promise<NavbarInfo | null> {
             return { acces: { type: "client" }, businessName }
         }
 
-        const assureur = await withRetry(() =>
-            prisma.assureur.findUnique({
-                where: { id: acces.assureurId },
+        const agentvendeur = await withRetry(() =>
+            prisma.agentvendeur.findUnique({
+                where: { id: acces.agentvendeurId },
                 select: { nom: true }
             })
         )
         return {
-            acces: { type: "assureur", role: acces.role, nom: assureur?.nom ?? "ASSUREUR" },
+            acces: { type: "agentvendeur", role: acces.role, nom: agentvendeur?.nom ?? "AGENTVENDEUR" },
             businessName: null
         }
     } catch (error) {

@@ -2,11 +2,11 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import {
-  getAssureurs,
-  creerAssureur,
-  basculerAssureurActif,
-  ajouterUtilisateurAssureur,
-  supprimerUtilisateurAssureur,
+  getAgentVendeurs,
+  creerAgentVendeur,
+  basculerAgentVendeurActif,
+  ajouterUtilisateurAgentVendeur,
+  supprimerUtilisateurAgentVendeur,
   getClientsOwner,
   rattacherClient,
   basculerAccesClientOwner
@@ -21,7 +21,7 @@ type UtilisateurRow = {
   connecte: boolean
 }
 
-type AssureurRow = {
+type AgentVendeurRow = {
   id: string
   code: string
   nom: string
@@ -40,34 +40,34 @@ type ClientOwnerRow = {
   telephone: string | null
   numeroPolice: string | null
   accesActif: boolean
-  assureurId: string | null
-  assureurNom: string | null
-  assureurCode: string | null
+  agentvendeurId: string | null
+  agentvendeurNom: string | null
+  agentvendeurCode: string | null
 }
 
 type ResultatAction = { success: true } | { success: false; message: string }
 
-const formAssureurVide = { nom: '', email: '', telephone: '', adminNom: '' }
+const formAgentVendeurVide = { nom: '', email: '', telephone: '', adminNom: '' }
 const formUtilisateurVide = { email: '', telephone: '', nom: '', role: 'LECTEUR' }
 
 const page = () => {
-  const [onglet, setOnglet] = useState<'assureurs' | 'clients'>('assureurs')
-  const [assureurs, setAssureurs] = useState<AssureurRow[]>([])
+  const [onglet, setOnglet] = useState<'agentvendeurs' | 'clients'>('agentvendeurs')
+  const [agentvendeurs, setAgentVendeurs] = useState<AgentVendeurRow[]>([])
   const [clients, setClients] = useState<ClientOwnerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [erreurChargement, setErreurChargement] = useState(false)
   const [message, setMessage] = useState('')
   const [enCours, setEnCours] = useState(false)
 
-  const [formAssureur, setFormAssureur] = useState(formAssureurVide)
-  const [assureurOuvertId, setAssureurOuvertId] = useState<string | null>(null)
+  const [formAgentVendeur, setFormAgentVendeur] = useState(formAgentVendeurVide)
+  const [agentvendeurOuvertId, setAgentVendeurOuvertId] = useState<string | null>(null)
   const [formUtilisateur, setFormUtilisateur] = useState(formUtilisateurVide)
   const [recherche, setRecherche] = useState('')
 
   const charger = useCallback(async () => {
     try {
-      const [listeAssureurs, listeClients] = await Promise.all([getAssureurs(), getClientsOwner()])
-      setAssureurs(listeAssureurs as AssureurRow[])
+      const [listeAgentVendeurs, listeClients] = await Promise.all([getAgentVendeurs(), getClientsOwner()])
+      setAgentVendeurs(listeAgentVendeurs as AgentVendeurRow[])
       setClients(listeClients as ClientOwnerRow[])
       setErreurChargement(false)
     } catch (error) {
@@ -104,33 +104,33 @@ const page = () => {
   }
 
   const creer = async () => {
-    const ok = await lancer(() => creerAssureur(formAssureur))
-    if (ok) setFormAssureur(formAssureurVide)
+    const ok = await lancer(() => creerAgentVendeur(formAgentVendeur))
+    if (ok) setFormAgentVendeur(formAgentVendeurVide)
   }
 
-  const ajouterUtilisateur = async (assureurId: string) => {
-    const ok = await lancer(() => ajouterUtilisateurAssureur(assureurId, formUtilisateur))
+  const ajouterUtilisateur = async (agentvendeurId: string) => {
+    const ok = await lancer(() => ajouterUtilisateurAgentVendeur(agentvendeurId, formUtilisateur))
     if (ok) {
       setFormUtilisateur(formUtilisateurVide)
-      setAssureurOuvertId(null)
+      setAgentVendeurOuvertId(null)
     }
   }
 
-  const basculerAssureur = async (a: AssureurRow) => {
+  const basculerAgentVendeur = async (a: AgentVendeurRow) => {
     const question = a.actif
       ? `Suspendre ${a.nom} ? Ses utilisateurs et tous ses clients perdront l'accès.`
       : `Réactiver ${a.nom} ?`
     if (!confirm(question)) return
-    await lancer(() => basculerAssureurActif(a.id, !a.actif))
+    await lancer(() => basculerAgentVendeurActif(a.id, !a.actif))
   }
 
   const retirerUtilisateur = async (u: UtilisateurRow) => {
     if (!confirm(`Retirer ${u.email ?? u.telephone} ?`)) return
-    await lancer(() => supprimerUtilisateurAssureur(u.id))
+    await lancer(() => supprimerUtilisateurAgentVendeur(u.id))
   }
 
-  const changerAssureurClient = async (client: ClientOwnerRow, assureurId: string) => {
-    await lancer(() => rattacherClient(client.id, assureurId || null))
+  const changerAgentVendeurClient = async (client: ClientOwnerRow, agentvendeurId: string) => {
+    await lancer(() => rattacherClient(client.id, agentvendeurId || null))
   }
 
   const basculerClient = async (client: ClientOwnerRow) => {
@@ -141,12 +141,12 @@ const page = () => {
   const clientsFiltres = clients.filter((c) => {
     const texte = recherche.trim().toLowerCase()
     if (!texte) return true
-    return [c.name, c.email, c.telephone, c.numeroPolice, c.assureurNom]
+    return [c.name, c.email, c.telephone, c.numeroPolice, c.agentvendeurNom]
       .filter(Boolean)
       .some((valeur) => (valeur as string).toLowerCase().includes(texte))
   })
 
-  const clientsSansAssureur = clients.filter((c) => !c.assureurId).length
+  const clientsSansAgentVendeur = clients.filter((c) => !c.agentvendeurId).length
 
   if (loading) {
     return (
@@ -182,25 +182,25 @@ const page = () => {
 
         <div className='grid md:grid-cols-3 gap-3'>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
-            <p className='text-xs uppercase text-gray-700 font-bold'>Assureurs</p>
-            <p className='text-2xl font-black text-red-500'>{assureurs.length}</p>
+            <p className='text-xs uppercase text-gray-700 font-bold'>AgentVendeurs</p>
+            <p className='text-2xl font-black text-red-500'>{agentvendeurs.length}</p>
           </div>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>Clients</p>
             <p className='text-2xl font-black text-success'>{clients.length}</p>
           </div>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
-            <p className='text-xs uppercase text-gray-700 font-bold'>Clients sans assureur</p>
-            <p className='text-2xl font-black text-blue-600'>{clientsSansAssureur}</p>
+            <p className='text-xs uppercase text-gray-700 font-bold'>Clients sans agentvendeur</p>
+            <p className='text-2xl font-black text-blue-600'>{clientsSansAgentVendeur}</p>
           </div>
         </div>
 
         <div className='tabs tabs-boxed w-fit font-bold'>
           <button
-            className={`tab font-bold ${onglet === 'assureurs' ? 'tab-active' : ''}`}
-            onClick={() => setOnglet('assureurs')}
+            className={`tab font-bold ${onglet === 'agentvendeurs' ? 'tab-active' : ''}`}
+            onClick={() => setOnglet('agentvendeurs')}
           >
-            ASSUREURS
+            AGENTVENDEURS
           </button>
           <button
             className={`tab font-bold ${onglet === 'clients' ? 'tab-active' : ''}`}
@@ -216,55 +216,55 @@ const page = () => {
           </div>
         )}
 
-        {/* ONGLET ASSUREURS */}
-        {onglet === 'assureurs' && (
+        {/* ONGLET AGENTVENDEURS */}
+        {onglet === 'agentvendeurs' && (
           <div className='space-y-4'>
 
             <div className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
-              <p className='text-sm uppercase text-gray-700 font-bold'>Nouvel assureur</p>
+              <p className='text-sm uppercase text-gray-700 font-bold'>Nouvel agentvendeur</p>
               <div className='grid md:grid-cols-2 gap-3'>
                 <input
                   type='text'
                   className='input input-bordered font-bold placeholder:font-bold'
-                  placeholder="Nom de l'assureur *"
-                  value={formAssureur.nom}
-                  onChange={(e) => setFormAssureur({ ...formAssureur, nom: e.target.value })}
+                  placeholder="Nom de l'agentvendeur *"
+                  value={formAgentVendeur.nom}
+                  onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, nom: e.target.value })}
                 />
                 <input
                   type='text'
                   className='input input-bordered font-bold placeholder:font-bold'
                   placeholder="Nom de l'administrateur"
-                  value={formAssureur.adminNom}
-                  onChange={(e) => setFormAssureur({ ...formAssureur, adminNom: e.target.value })}
+                  value={formAgentVendeur.adminNom}
+                  onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, adminNom: e.target.value })}
                 />
                 <input
                   type='email'
                   className='input input-bordered normal-case font-bold placeholder:font-bold'
                   placeholder="Email de l'administrateur"
-                  value={formAssureur.email}
-                  onChange={(e) => setFormAssureur({ ...formAssureur, email: e.target.value })}
+                  value={formAgentVendeur.email}
+                  onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, email: e.target.value })}
                 />
                 <input
                   type='tel'
                   className='input input-bordered font-bold placeholder:font-bold'
                   placeholder="Téléphone de l'administrateur"
-                  value={formAssureur.telephone}
-                  onChange={(e) => setFormAssureur({ ...formAssureur, telephone: e.target.value })}
+                  value={formAgentVendeur.telephone}
+                  onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, telephone: e.target.value })}
                 />
               </div>
               <p className='text-xs text-gray-700 normal-case font-bold'>
                 Renseignez au moins l&apos;email ou le téléphone : l&apos;administrateur s&apos;en servira pour se connecter.
               </p>
               <button className='btn btn-sm btn-primary font-bold' disabled={enCours} onClick={creer}>
-                {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'CRÉER L\'ASSUREUR'}
+                {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'CRÉER L\'AGENTVENDEUR'}
               </button>
             </div>
 
-            {assureurs.length === 0 && (
-              <p className='text-sm text-gray-600 normal-case font-bold'>Aucun assureur pour le moment.</p>
+            {agentvendeurs.length === 0 && (
+              <p className='text-sm text-gray-600 normal-case font-bold'>Aucun agentvendeur pour le moment.</p>
             )}
 
-            {assureurs.map((a) => (
+            {agentvendeurs.map((a) => (
               <div key={a.id} className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
                 <div>
                   <p className='text-lg font-black text-success'>{a.nom}</p>
@@ -277,7 +277,7 @@ const page = () => {
                       <span className={`badge font-bold ${a.actif ? 'badge-success' : 'badge-error'}`}>
                         {a.actif ? 'Actif' : 'Suspendu'}
                       </span>
-                      <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerAssureur(a)}>
+                      <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerAgentVendeur(a)}>
                         {a.actif ? 'SUSPENDRE' : 'RÉACTIVER'}
                       </button>
                     </div>
@@ -316,16 +316,16 @@ const page = () => {
                   </table>
                 </div>
 
-                {assureurOuvertId !== a.id && (
+                {agentvendeurOuvertId !== a.id && (
                   <button
                     className='btn btn-xs btn-outline font-bold'
-                    onClick={() => { setAssureurOuvertId(a.id); setFormUtilisateur(formUtilisateurVide) }}
+                    onClick={() => { setAgentVendeurOuvertId(a.id); setFormUtilisateur(formUtilisateurVide) }}
                   >
                     + AJOUTER UN UTILISATEUR
                   </button>
                 )}
 
-                {assureurOuvertId === a.id && (
+                {agentvendeurOuvertId === a.id && (
                   <div className='border-2 border-base-200 rounded-3xl p-3 space-y-3 font-bold'>
                     <div className='grid md:grid-cols-2 gap-3'>
                       <input
@@ -362,7 +362,7 @@ const page = () => {
                       <button className='btn btn-xs btn-primary font-bold' disabled={enCours} onClick={() => ajouterUtilisateur(a.id)}>
                         AJOUTER
                       </button>
-                      <button className='btn btn-xs btn-ghost font-bold' onClick={() => setAssureurOuvertId(null)}>
+                      <button className='btn btn-xs btn-ghost font-bold' onClick={() => setAgentVendeurOuvertId(null)}>
                         ANNULER
                       </button>
                     </div>
@@ -399,7 +399,7 @@ const page = () => {
                       <th className='font-bold'>Client</th>
                       <th className='font-bold'>Contact</th>
                       <th className='font-bold'>N° police</th>
-                      <th className='font-bold'>Assureur</th>
+                      <th className='font-bold'>AgentVendeur</th>
                       <th className='font-bold'>Accès</th>
                     </tr>
                   </thead>
@@ -415,12 +415,12 @@ const page = () => {
                         <td>
                           <select
                             className='select select-bordered select-sm font-bold'
-                            value={c.assureurId ?? ''}
+                            value={c.agentvendeurId ?? ''}
                             disabled={enCours}
-                            onChange={(e) => changerAssureurClient(c, e.target.value)}
+                            onChange={(e) => changerAgentVendeurClient(c, e.target.value)}
                           >
                             <option className='font-bold' value=''>— Aucun —</option>
-                            {assureurs.map((a) => (
+                            {agentvendeurs.map((a) => (
                               <option className='font-bold' key={a.id} value={a.id}>{a.nom}</option>
                             ))}
                           </select>

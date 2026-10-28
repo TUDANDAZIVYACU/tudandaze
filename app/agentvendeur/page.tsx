@@ -3,14 +3,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Wrapper from '../components/Wrapper'
 import {
-  getMonAssureur,
-  getClientsAssureur,
+  getMonAgentVendeur,
+  getClientsAgentVendeur,
   basculerAccesClient,
-  importerClientsAssureur
-} from '../actions-assureur'
+  importerClientsAgentVendeur
+} from '../actions-agentvendeur'
 import { lireClientsExcel } from '@/lib/lire-clients-excel'
 
-type MonAssureur = {
+type MonAgentVendeur = {
   id: string
   nom: string
   code: string
@@ -36,11 +36,11 @@ type ResultatImport = {
   ignores: { ligne: number; nom: string; raison: string }[]
 }
 
-// Fiche importée par l'assureur (Excel) qui attend l'inscription du client : ni email ni téléphone de connexion
+// Fiche importée par l'agentvendeur (Excel) qui attend l'inscription du client : ni email ni téléphone de connexion
 const estEnAttente = (c: ClientRow) => !c.email && !c.telephone
 
 const page = () => {
-  const [assureur, setAssureur] = useState<MonAssureur | null>(null)
+  const [agentvendeur, setAgentVendeur] = useState<MonAgentVendeur | null>(null)
   const [clients, setClients] = useState<ClientRow[]>([])
   const [loading, setLoading] = useState(true)
   const [erreurChargement, setErreurChargement] = useState(false)
@@ -50,12 +50,12 @@ const page = () => {
   const [resultatImport, setResultatImport] = useState<ResultatImport | null>(null)
   const fichierRef = useRef<HTMLInputElement>(null)
 
-  const estAdmin = assureur?.role === 'ADMIN'
+  const estAdmin = agentvendeur?.role === 'ADMIN'
 
   const charger = useCallback(async () => {
     try {
-      const [infos, liste] = await Promise.all([getMonAssureur(), getClientsAssureur()])
-      setAssureur(infos)
+      const [infos, liste] = await Promise.all([getMonAgentVendeur(), getClientsAgentVendeur()])
+      setAgentVendeur(infos)
       setClients(liste as ClientRow[])
       setErreurChargement(false)
     } catch (error) {
@@ -71,14 +71,14 @@ const page = () => {
   }, [charger])
 
   const copierCode = async () => {
-    if (!assureur) return
+    if (!agentvendeur) return
     try {
-      await navigator.clipboard.writeText(assureur.code)
+      await navigator.clipboard.writeText(agentvendeur.code)
       setCodeCopie(true)
       setTimeout(() => setCodeCopie(false), 2000)
     } catch (error) {
       console.error(error)
-      alert(`Code : ${assureur.code}`)
+      alert(`Code : ${agentvendeur.code}`)
     }
   }
 
@@ -107,7 +107,7 @@ const page = () => {
         echec('Le fichier ne contient aucun client sous la ligne des titres.')
         return
       }
-      const res = await importerClientsAssureur(lignes)
+      const res = await importerClientsAgentVendeur(lignes)
       if (!res.success) {
         echec(res.message)
         return
@@ -162,11 +162,11 @@ const page = () => {
     )
   }
 
-  if (erreurChargement || !assureur) {
+  if (erreurChargement || !agentvendeur) {
     return (
       <Wrapper>
         <div className='border-2 border-base-200 rounded-3xl p-6 text-center font-bold'>
-          <p>Impossible de charger votre espace assureur.</p>
+          <p>Impossible de charger votre espace agentvendeur.</p>
           <p className='text-sm text-gray-500 normal-case mt-2'>
             Vérifiez votre connexion, ou contactez l&apos;administrateur si le problème persiste.
           </p>
@@ -187,15 +187,15 @@ const page = () => {
       <div className='space-y-4 font-bold'>
 
         <h1 className='text-lg font-bold text-error'>
-          ESPACE ASSUREUR — {assureur.nom}
+          ESPACE AGENTVENDEUR — {agentvendeur.nom}
         </h1>
 
-        {/* CODE ASSUREUR : à donner aux clients, qui s'enregistrent eux-mêmes */}
+        {/* CODE AGENTVENDEUR : à donner aux clients, qui s'enregistrent eux-mêmes */}
         {estAdmin && (
           <div className='border-2 border-base-200 rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3'>
             <div>
-              <p className='text-xs uppercase text-gray-600'>Votre code assureur</p>
-              <p className='text-2xl font-black text-success tracking-widest'>{assureur.code}</p>
+              <p className='text-xs uppercase text-gray-600'>Votre code agentvendeur</p>
+              <p className='text-2xl font-black text-success tracking-widest'>{agentvendeur.code}</p>
               <p className='text-xs text-gray-600 normal-case'>
                 Donnez ce code à vos clients : ils créent leur compte et s&apos;enregistrent eux-mêmes.
               </p>
@@ -336,13 +336,13 @@ const page = () => {
                       </td>
                       <td className='whitespace-nowrap'>
                         <Link
-                          href={`/assureur/variation/${c.id}`}
+                          href={`/agentvendeur/variation/${c.id}`}
                           className='btn btn-xs btn-secondary mr-1'
                         >
                           IN/OUT
                         </Link>
                         <Link
-                          href={`/assureur/stock/${c.id}`}
+                          href={`/agentvendeur/stock/${c.id}`}
                           className='btn btn-xs btn-primary mr-1'
                         >
                           STOCK
