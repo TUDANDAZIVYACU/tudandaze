@@ -63,3 +63,6 @@ dump.sql
 
 prisma/dev.db
 *.db
+
+prisma/dev.db
+*.db
