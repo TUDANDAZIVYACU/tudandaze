@@ -1,6 +1,43 @@
 @import "tailwindcss";
+
+/* Thème bleu ciel, inspiré des 6 modèles : fond gris clair, cartes blanches arrondies */
+@plugin "daisyui/theme" {
+  name: "ciel";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97.5% 0.008 240);
+  --color-base-300: oklch(93% 0.014 240);
+  --color-base-content: oklch(27% 0.03 255);
+  --color-primary: oklch(62% 0.16 240);
+  --color-primary-content: oklch(99% 0.005 240);
+  --color-secondary: oklch(58% 0.17 265);
+  --color-secondary-content: oklch(99% 0.005 265);
+  --color-accent: oklch(76% 0.13 195);
+  --color-accent-content: oklch(25% 0.05 195);
+  --color-neutral: oklch(27% 0.04 255);
+  --color-neutral-content: oklch(97% 0.005 255);
+  --color-info: oklch(72% 0.13 225);
+  --color-info-content: oklch(22% 0.05 225);
+  --color-success: oklch(70% 0.17 155);
+  --color-success-content: oklch(22% 0.06 155);
+  --color-warning: oklch(82% 0.16 85);
+  --color-warning-content: oklch(28% 0.07 85);
+  --color-error: oklch(63% 0.21 25);
+  --color-error-content: oklch(98% 0.01 25);
+  --radius-selector: 1rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 @plugin "daisyui" {
-  themes: retro --default, light, dark --prefersdark, cupcake, bumblebee, emerald,
+  themes: retro, light, dark --prefersdark, cupcake, bumblebee, emerald,
           corporate, synthwave, cyberpunk, valentine, halloween, garden,
           forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury,
           dracula, cmyk, autumn, business, acid, lemonade, night, coffee, winter;
@@ -23,14 +60,22 @@
 /* React toastify override */
 
 :root {
-  --toastify-color-light: #ECE3CA;
-  --toastify-text-color-light: #af1a07b9;
+  --toastify-color-light: #ffffff;
+  --toastify-text-color-light: #0369a1;
 }
 
 body,
 input,
 select,
-textarea,
+textarea {
+  font-weight: 500;
+}
+
 button {
-  font-weight: 700;
+  font-weight: 600;
+}
+
+/* Chiffres alignés dans les cartes et les tableaux */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

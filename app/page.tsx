@@ -24,6 +24,27 @@ const dateLongue = (iso: string) =>
 const CLE_CACHE = "dashboard-cache-v2"
 type CacheDashboard = { email: string; date: string; data: DashboardData }
 
+// Carte de chiffre clé : libellé en haut, grand chiffre, précision en bas
+function CarteChiffre({
+  libelle,
+  valeur,
+  note,
+  classeValeur = "",
+}: {
+  libelle: string
+  valeur: string
+  note?: string
+  classeValeur?: string
+}) {
+  return (
+    <div className="rounded-2xl bg-base-100 p-4 shadow-sm">
+      <p className="text-xs font-medium text-base-content/60 sm:text-sm">{libelle}</p>
+      <p className={`mt-1 text-xl font-bold tabular-nums sm:text-2xl lg:text-3xl ${classeValeur}`}>{valeur}</p>
+      {note && <p className="mt-0.5 text-[11px] text-base-content/50 sm:text-xs">{note}</p>}
+    </div>
+  )
+}
+
 export default function Home() {
   const { user } = useUser()
   const email = user?.primaryEmailAddress?.emailAddress as string
@@ -98,33 +119,48 @@ export default function Home() {
         }, 0)
     : undefined
 
+  const prenom = user?.firstName
+
   return (
     <Wrapper compact>
-      {/* En-tête : la journée consultée à gauche, la valeur du stock à droite (même sur mobile) */}
-      <section className="mb-5 flex flex-nowrap items-end justify-between gap-x-3 border-b border-base-300 pb-5 md:gap-x-6">
+      {/* En-tête : bonjour et journée consultée à gauche, sélecteur de date à droite */}
+      <section className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-bold leading-tight first-letter:uppercase sm:text-2xl md:text-3xl">
+          {prenom && <p className="text-sm text-base-content/60">Bonjour {prenom}</p>}
+          <h1 className="text-xl font-bold leading-tight first-letter:uppercase sm:text-2xl md:text-3xl">
             {titre}
           </h1>
-          <div className="mt-3">
-            <input
-              aria-label="Choisir la date"
-              type="date"
-              className="input input-bordered input-sm max-w-full"
-              value={dateFiltre}
-              onChange={(e) => setDateFiltre(e.target.value)}
-            />
-          </div>
         </div>
+        <input
+          aria-label="Choisir la date"
+          type="date"
+          className="input input-bordered input-sm max-w-full bg-base-100"
+          value={dateFiltre}
+          onChange={(e) => setDateFiltre(e.target.value)}
+        />
+      </section>
 
-        <div className="shrink-0 text-right">
-          <p className="text-xs font-normal opacity-70 sm:text-sm">Valeur du stock</p>
-          <p className="text-xl font-bold tabular-nums text-success sm:text-3xl md:text-4xl">
-            {dashboard ? dashboard.stockValue.toLocaleString() : "…"}{" "}
-            <span className="text-xs font-medium opacity-60 sm:text-sm"></span>
-          </p>
-          <p className="text-[10px] font-normal opacity-60 sm:text-xs">au prix de vente</p>
+      {/* Chiffres clés de la journée */}
+      <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div className="col-span-2 lg:col-span-1">
+          <CarteChiffre
+            libelle="Valeur du stock"
+            valeur={dashboard ? dashboard.stockValue.toLocaleString() : "…"}
+            note="au prix de vente"
+            classeValeur="text-primary"
+          />
         </div>
+        <CarteChiffre
+          libelle="Marge du jour"
+          valeur={margeTotale !== undefined ? margeTotale.toLocaleString() : "…"}
+          note="ventes avec prix d'achat connu"
+          classeValeur={margeTotale !== undefined && margeTotale < 0 ? "text-error" : "text-success"}
+        />
+        <CarteChiffre
+          libelle="Opérations"
+          valeur={dashboard ? dashboard.transactions.length.toLocaleString() : "…"}
+          note="achats et ventes de la période"
+        />
       </section>
 
       {erreur && !dashboard ? (
@@ -137,8 +173,8 @@ export default function Home() {
       ) : (
         /* Téléphone : récapitulatif, achats et ventes, puis état du stock.
            Ordinateur : récapitulatif et opérations à gauche, l'état du stock reste à droite. */
-        <div className="grid gap-4 lg:grid-cols-12">
-          <div className="order-1 lg:order-none lg:col-span-7">
+        <div className="grid gap-4 xl:grid-cols-12">
+          <div className="order-1 xl:order-none xl:col-span-7">
             <ProductOverview
               email={email}
               dateFiltre={dateFiltre}
@@ -146,10 +182,10 @@ export default function Home() {
               margeTotale={margeTotale}
             />
           </div>
-          <div className="order-3 lg:order-none lg:col-span-5 lg:row-span-2">
+          <div className="order-3 xl:order-none xl:col-span-5 xl:row-span-2">
             <StockSummaryTable email={email} dateFiltre={dateFiltre} donnees={dashboard?.summary ?? null} />
           </div>
-          <div className="order-2 lg:order-none lg:col-span-7">
+          <div className="order-2 xl:order-none xl:col-span-7">
             <RecentTransactions
               email={email}
               dateFiltre={dateFiltre}

@@ -1,6 +1,7 @@
 "use client";
 import { UserButton, useUser } from '@clerk/nextjs'
-import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, Menu, X, Wrench, CreditCard } from 'lucide-react'
+import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, Wrench, CreditCard, Wallet } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
@@ -10,6 +11,7 @@ import Stock from './Stock'
 import ThemeSelector from './ThemeSelector'
 
 type AccesNavbar = NavbarInfo['acces'] | null
+type Lien = { href: string; label: string; court?: string; icon: LucideIcon }
 
 const APP_NAME = "ASSURANCE.COM"
 
@@ -17,20 +19,41 @@ const APP_NAME = "ASSURANCE.COM"
 const CLE_CACHE = "navbar-cache-v1"
 type CacheNavbar = { userId: string; info: NavbarInfo }
 
-// Style d'un lien du menu : pastille pleine pour la page ouverte, simple survol pour les autres.
-// Téléphone : liens alignés à gauche, un par ligne. Ordinateur : une seule ligne centrée.
-const styleLien = (actif: boolean) =>
-    `flex items-center justify-start gap-1.5 rounded-lg px-3 py-1.5 text-left text-[13px] font-semibold leading-tight transition-colors md:shrink-0 md:whitespace-nowrap md:px-2.5 md:py-2 ${
-        actif ? 'bg-primary text-primary-content' : 'hover:bg-base-200'
+// Ordinateur : lien du menu du haut (pastille bleu ciel pour la page ouverte)
+const styleLienHaut = (actif: boolean) =>
+    `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 py-2 text-[13px] font-semibold leading-tight transition-colors ${
+        actif ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content/70 hover:bg-base-200 hover:text-base-content'
     }`
 
-// Icône : visible sur téléphone et sur grand écran, masquée entre les deux pour que le menu tienne sur une ligne
+// Icône du menu du haut : masquée entre tablette et grand écran pour que le menu tienne sur une ligne
 const classeIcone = 'h-4 w-4 md:hidden xl:block'
 
-// Menu ouvert sur téléphone : une colonne, sans interligne. Ordinateur : une seule ligne centrée
-// (elle passe à la ligne seulement sur les écrans de tablette, trop étroits).
-const classeNav = (menuOpen: boolean) =>
-    `${menuOpen ? 'mt-2 flex flex-col items-stretch gap-0' : 'hidden'} md:mt-1 md:flex md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-0.5 lg:flex-nowrap lg:-mx-[8%]`
+// Menu du haut : une seule ligne centrée (elle passe à la ligne seulement sur les écrans de tablette)
+const classeNavHaut = 'mt-1 flex flex-row flex-wrap items-center justify-center gap-0.5 lg:flex-nowrap lg:-mx-[8%]'
+
+// Téléphone : onglet de la barre du bas (icône au-dessus du texte, largeur fixe : la barre défile horizontalement)
+const styleOnglet = (actif: boolean) =>
+    `flex w-[5.25rem] shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-semibold leading-tight transition-colors ${
+        actif ? 'bg-primary/10 text-primary' : 'text-base-content/60'
+    }`
+
+// Liens du menu client
+const lienObservation: Lien = { href: "/", label: "Observation", icon: LayoutDashboard }
+const lienProduit: Lien = { href: "/new-product", label: "Produit", icon: PackagePlus }
+const lienVente: Lien = { href: "/give", label: "Vente", icon: HandHeart }
+const lienHistorique: Lien = { href: "/transactions", label: "Historique", icon: Receipt }
+const lienDettes: Lien = { href: "/dettes", label: "Dettes", icon: ListTree }
+const lienDepenses: Lien = { href: "/depenses", label: "Dépenses", icon: Wallet }
+const lienCentralisation: Lien = { href: "/bilan", label: "Centralisation", court: "Centralis.", icon: Scale }
+const lienEquipements: Lien = { href: "/immobilisations", label: "Équipements", icon: Wrench }
+const lienUtilisateurs: Lien = { href: "/admin", label: "Utilisateurs", icon: Users }
+const lienAbonnement: Lien = { href: "/abonnement", label: "Abonnement", icon: CreditCard }
+
+// Seul l'agentvendeur a un lien de gestion ; le propriétaire n'en a plus
+const liensGestion: Lien[] = [{ href: "/agentvendeur", label: "Mes clients", icon: Users }]
+
+const ouvrirApprovisionnement = () =>
+    (document.getElementById('my_modal_stock') as HTMLDialogElement).showModal()
 
 const Navbar = () => {
     const { user, isLoaded } = useUser()
@@ -38,7 +61,7 @@ const Navbar = () => {
     const router = useRouter()
     const [businessName, setBusinessName] = useState<string>(APP_NAME)
     const [acces, setAcces] = useState<AccesNavbar>(null)
-    const [menuOpen, setMenuOpen] = useState(false)
+    const barreRef = useRef<HTMLDivElement>(null)
     const hasSynced = useRef(false)
 
     const role = user?.publicMetadata?.role as string | undefined
@@ -67,28 +90,19 @@ const Navbar = () => {
                 ? acces.nom
                 : businessName
 
-    // Ordre d'affichage (téléphone et ordinateur) :
+    // Ordinateur (menu du haut), dans l'ordre :
     // Observation, Produit, Approvisionnement (bouton), Vente, Historique, Dettes, Dépenses, Centralisation,
     // Équipements, Utilisateurs (administrateur), Abonnement
-    const liensAvant = [
-        { href: "/", label: "Observation", icon: LayoutDashboard },
-        { href: "/new-product", label: "Produit", icon: PackagePlus },
-    ]
-    const liensApres = [
-        { href: "/give", label: "Vente", icon: HandHeart },
-        { href: "/transactions", label: "Historique", icon: Receipt },
-        { href: "/dettes", label: "Dettes", icon: ListTree },
-        { href: "/depenses", label: "Dépenses", icon: ListTree },
-        { href: "/bilan", label: "Centralisation", icon: Scale },
-        { href: "/immobilisations", label: "Équipements", icon: Wrench },
-    ]
+    const liensAvant = [lienObservation, lienProduit]
+    const liensApres = [lienVente, lienHistorique, lienDettes, lienDepenses, lienCentralisation, lienEquipements]
 
-    // Seul l'agentvendeur a un lien de gestion ; le propriétaire n'en a plus
-    const liensGestion = [{ href: "/agentvendeur", label: "Mes clients", icon: Users }]
-
+    // Téléphone (barre du bas) : tous les liens, dans le même ordre que sur ordinateur, à faire défiler vers la droite.
+    // La page ouverte est ramenée au centre de la barre à chaque changement de page.
     useEffect(() => {
-        setMenuOpen(false)
-    }, [pathname])
+        barreRef.current
+            ?.querySelector('[aria-current="page"]')
+            ?.scrollIntoView({ inline: 'center', block: 'nearest' })
+    }, [pathname, acces])
 
     // 1) Affichage immédiat du dernier état connu pour ce compte
     useEffect(() => {
@@ -151,68 +165,60 @@ const Navbar = () => {
             .catch((err) => console.error("Erreur checkAndAddBusinessbi:", err))
     }, [user, acces])
 
+    const logo = (
+        <span className='flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-content'>
+            <PackagePlus className='h-5 w-5' />
+        </span>
+    )
+
+    const avecMenu = accesCharge && (mode === 'client' || mode === 'agentvendeur')
+
     return (
-        <header className='border-b border-base-300 bg-base-100 px-5 pb-2 pt-3 md:px-[10%] print:hidden'>
-            {/* Ligne 1 : nom de l'entreprise à gauche, outils à droite */}
-            <div className='flex items-center justify-between gap-3'>
-                <div className='flex min-w-0 items-center gap-3'>
-                    <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-content'>
-                        <PackagePlus className='h-5 w-5' />
-                    </span>
-                    <span className='truncate text-lg font-bold md:text-xl'>{titre}</span>
+        <>
+            {/* ORDINATEUR : en-tête avec le menu sur une seule ligne centrée (même largeur que les pages) */}
+            <header className='hidden rounded-b-3xl bg-base-100 shadow-sm md:block print:hidden'>
+                <div className='mx-auto w-full max-w-6xl px-8 pb-2 pt-3'>
+                <div className='flex items-center justify-between gap-3'>
+                    <div className='flex min-w-0 items-center gap-3'>
+                        {logo}
+                        <span className='truncate text-lg font-bold md:text-xl'>{titre}</span>
+                    </div>
+                    <div className='flex shrink-0 items-center gap-2'>
+                        <ThemeSelector />
+                        <UserButton />
+                    </div>
                 </div>
-                <div className='flex shrink-0 items-center gap-2'>
-                    {(mode === 'agentvendeur' || mode === 'client') && (
-                        <button
-                            className='btn btn-sm btn-ghost md:hidden'
-                            onClick={() => setMenuOpen((prev) => !prev)}
-                            aria-label="Afficher le menu"
-                            aria-expanded={menuOpen}
-                        >
-                            {menuOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
-                        </button>
-                    )}
-                    <ThemeSelector />
-                    <UserButton />
-                </div>
-            </div>
 
-            {accesCharge && mode === 'agentvendeur' && (
-                <nav aria-label='Navigation principale' className={classeNav(menuOpen)}>
-                    {liensGestion.map(({ href, label, icon: Icon }) => (
-                        <Link
-                            href={href}
-                            key={href}
-                            aria-current={pathname === href ? 'page' : undefined}
-                            className={styleLien(pathname === href)}
-                        >
-                            <Icon className={classeIcone} />
-                            {label}
-                        </Link>
-                    ))}
-                </nav>
-            )}
-
-            {accesCharge && mode === 'client' && (
-                <>
-                    {/* Téléphone : liens à gauche, un sous l'autre. Ordinateur : une seule ligne centrée. */}
-                    <nav aria-label='Navigation principale' className={classeNav(menuOpen)}>
-                        {liensAvant.map(({ href, label, icon: Icon }) => (
+                {accesCharge && mode === 'agentvendeur' && (
+                    <nav aria-label='Navigation principale' className={classeNavHaut}>
+                        {liensGestion.map(({ href, label, icon: Icon }) => (
                             <Link
                                 href={href}
                                 key={href}
                                 aria-current={pathname === href ? 'page' : undefined}
-                                className={styleLien(pathname === href)}
+                                className={styleLienHaut(pathname === href)}
                             >
                                 <Icon className={classeIcone} />
                                 {label}
                             </Link>
                         ))}
-                        <button
-                            type='button'
-                            className={styleLien(false)}
-                            onClick={() => (document.getElementById('my_modal_stock') as HTMLDialogElement).showModal()}
-                        >
+                    </nav>
+                )}
+
+                {accesCharge && mode === 'client' && (
+                    <nav aria-label='Navigation principale' className={classeNavHaut}>
+                        {liensAvant.map(({ href, label, icon: Icon }) => (
+                            <Link
+                                href={href}
+                                key={href}
+                                aria-current={pathname === href ? 'page' : undefined}
+                                className={styleLienHaut(pathname === href)}
+                            >
+                                <Icon className={classeIcone} />
+                                {label}
+                            </Link>
+                        ))}
+                        <button type='button' className={styleLienHaut(false)} onClick={ouvrirApprovisionnement}>
                             <Warehouse className={classeIcone} />
                             Approvisionnement
                         </button>
@@ -221,7 +227,7 @@ const Navbar = () => {
                                 href={href}
                                 key={href}
                                 aria-current={pathname === href ? 'page' : undefined}
-                                className={styleLien(pathname === href)}
+                                className={styleLienHaut(pathname === href)}
                             >
                                 <Icon className={classeIcone} />
                                 {label}
@@ -229,10 +235,10 @@ const Navbar = () => {
                         ))}
                         {isAdmin && (
                             <Link
-                                href="/admin"
+                                href={lienUtilisateurs.href}
                                 aria-label="Utilisateurs"
-                                aria-current={pathname === '/admin' ? 'page' : undefined}
-                                className={styleLien(pathname === '/admin')}
+                                aria-current={pathname === lienUtilisateurs.href ? 'page' : undefined}
+                                className={styleLienHaut(pathname === lienUtilisateurs.href)}
                             >
                                 <Users className={classeIcone} />
                                 Utilisateurs
@@ -240,20 +246,108 @@ const Navbar = () => {
                         )}
                         {/* Abonnement : administrateur et caissier peuvent payer à l'avance ; les mois s'ajoutent à la fin de l'abonnement en cours */}
                         <Link
-                            href="/abonnement"
+                            href={lienAbonnement.href}
                             aria-label="Abonnement"
-                            aria-current={pathname === '/abonnement' ? 'page' : undefined}
-                            className={styleLien(pathname === '/abonnement')}
+                            aria-current={pathname === lienAbonnement.href ? 'page' : undefined}
+                            className={styleLienHaut(pathname === lienAbonnement.href)}
                         >
                             <CreditCard className={classeIcone} />
                             Abonnement
                         </Link>
                     </nav>
+                )}
+                </div>
+            </header>
 
-                    <Stock />
-                </>
+            {/* TÉLÉPHONE : barre du haut (nom + outils) */}
+            <header className='sticky top-0 z-30 flex items-center justify-between gap-3 rounded-b-3xl bg-base-100 px-5 py-3 shadow-sm md:hidden print:hidden'>
+                <div className='flex min-w-0 items-center gap-3'>
+                    {logo}
+                    <span className='truncate text-lg font-bold'>{titre}</span>
+                </div>
+                <div className='flex shrink-0 items-center gap-2'>
+                    <ThemeSelector />
+                    <UserButton />
+                </div>
+            </header>
+
+            {/* TÉLÉPHONE : barre de navigation en bas, avec tous les liens (à faire défiler vers la droite) */}
+            {avecMenu && (
+                <nav
+                    aria-label='Navigation principale'
+                    className='fixed inset-x-0 bottom-0 z-50 border-t border-base-300 bg-base-100 pb-[env(safe-area-inset-bottom)] md:hidden print:hidden'
+                >
+                    <div
+                        ref={barreRef}
+                        className='flex items-stretch gap-1 overflow-x-auto px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+                    >
+                        {mode === 'agentvendeur' &&
+                            liensGestion.map(({ href, label, court, icon: Icon }) => (
+                                <Link
+                                    href={href}
+                                    key={href}
+                                    aria-current={pathname === href ? 'page' : undefined}
+                                    className={styleOnglet(pathname === href)}
+                                >
+                                    <Icon className='h-5 w-5' />
+                                    <span className='max-w-full truncate'>{court ?? label}</span>
+                                </Link>
+                            ))}
+
+                        {mode === 'client' && (
+                            <>
+                                {liensAvant.map(({ href, label, court, icon: Icon }) => (
+                                    <Link
+                                        href={href}
+                                        key={href}
+                                        aria-current={pathname === href ? 'page' : undefined}
+                                        className={styleOnglet(pathname === href)}
+                                    >
+                                        <Icon className='h-5 w-5' />
+                                        <span className='max-w-full truncate'>{court ?? label}</span>
+                                    </Link>
+                                ))}
+                                <button type='button' className={styleOnglet(false)} onClick={ouvrirApprovisionnement}>
+                                    <Warehouse className='h-5 w-5' />
+                                    <span className='max-w-full truncate'>Approvis.</span>
+                                </button>
+                                {liensApres.map(({ href, label, court, icon: Icon }) => (
+                                    <Link
+                                        href={href}
+                                        key={href}
+                                        aria-current={pathname === href ? 'page' : undefined}
+                                        className={styleOnglet(pathname === href)}
+                                    >
+                                        <Icon className='h-5 w-5' />
+                                        <span className='max-w-full truncate'>{court ?? label}</span>
+                                    </Link>
+                                ))}
+                                {isAdmin && (
+                                    <Link
+                                        href={lienUtilisateurs.href}
+                                        aria-current={pathname === lienUtilisateurs.href ? 'page' : undefined}
+                                        className={styleOnglet(pathname === lienUtilisateurs.href)}
+                                    >
+                                        <Users className='h-5 w-5' />
+                                        <span className='max-w-full truncate'>Utilisateurs</span>
+                                    </Link>
+                                )}
+                                <Link
+                                    href={lienAbonnement.href}
+                                    aria-current={pathname === lienAbonnement.href ? 'page' : undefined}
+                                    className={styleOnglet(pathname === lienAbonnement.href)}
+                                >
+                                    <CreditCard className='h-5 w-5' />
+                                    <span className='max-w-full truncate'>Abonnement</span>
+                                </Link>
+                            </>
+                        )}
+                    </div>
+                </nav>
             )}
-        </header>
+
+            {accesCharge && mode === 'client' && <Stock />}
+        </>
     )
 }
 

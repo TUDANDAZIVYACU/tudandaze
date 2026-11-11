@@ -1,7 +1,7 @@
 // Configuration unique des abonnements : modifier ici le prix ou les remises suffit.
 // Utilisable côté client (BillingForm) et côté serveur (API, webhook).
 
-export const PRIX_MENSUEL = 200000; // FBU par mois
+export const PRIX_MENSUEL = 150000; // FBU par mois
 
 export type PlanKey = "mensuel" | "trimestriel" | "semestriel" | "annuel";
 
@@ -28,8 +28,8 @@ export function montantPlan(plan: Plan): number {
   return Math.round((PRIX_MENSUEL * plan.mois * (100 - plan.remise)) / 100);
 }
 
-// Plans avec leur montant calculé (mensuel 200 000, trimestriel 540 000,
-// semestriel 960 000, annuel 1 680 000)
+// Plans avec leur montant calculé (mensuel 150 000, trimestriel 405 000,
+// semestriel 720 000, annuel 1 260 000)
 export const PLANS_AVEC_MONTANT = PLANS.map((p) => ({ ...p, montant: montantPlan(p) }));
 
 // Ajoute n mois à une date en gardant le même jour (ou le dernier jour du mois)

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { Palette } from 'lucide-react'
 
 const THEMES = [
-  "retro", "light", "dark", "cupcake", "bumblebee", "emerald", "corporate",
+  "ciel", "retro", "light", "dark", "cupcake", "bumblebee", "emerald", "corporate",
   "synthwave", "cyberpunk", "valentine", "halloween", "garden",
   "forest", "aqua", "lofi", "pastel", "fantasy", "wireframe", "black",
   "luxury", "dracula", "cmyk", "autumn", "business", "acid", "lemonade",
@@ -11,6 +11,7 @@ const THEMES = [
 ]
 
 const THEME_COLORS: Record<string, { bg: string }> = {
+  ciel: { bg: "#7dd3fc" },
   retro: { bg: "#e4d8b4" }, light: { bg: "#ffffff" }, dark: { bg: "#1d232a" },
   cupcake: { bg: "#faf7f5" }, bumblebee: { bg: "#fffde7" }, emerald: { bg: "#f0fdf4" },
   corporate: { bg: "#f3f4f6" }, synthwave: { bg: "#2d1b69" }, cyberpunk: { bg: "#ffee00" },
@@ -23,12 +24,15 @@ const THEME_COLORS: Record<string, { bg: string }> = {
   coffee: { bg: "#20161f" }, winter: { bg: "#e8f4fd" },
 }
 
-const ThemeSelector = () => {
-  const [currentTheme, setCurrentTheme] = useState("retro")
+const THEME_PAR_DEFAUT = "ciel"
+
+// direction : "down" (barre du haut, le menu s'ouvre vers le bas) ou "up" (bas de la barre latérale, il s'ouvre vers le haut)
+const ThemeSelector = ({ direction = "down" }: { direction?: "down" | "up" }) => {
+  const [currentTheme, setCurrentTheme] = useState(THEME_PAR_DEFAUT)
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    const saved = localStorage.getItem("theme") || "retro"
+    const saved = localStorage.getItem("theme") || THEME_PAR_DEFAUT
     setCurrentTheme(saved)
     document.documentElement.setAttribute("data-theme", saved)
   }, [])
@@ -39,6 +43,12 @@ const ThemeSelector = () => {
     localStorage.setItem("theme", theme)
     setOpen(false)
   }
+
+  // Écran large : menu accroché au bouton, vers le bas ou vers le haut. Téléphone : menu pleine largeur.
+  const position =
+    direction === "up"
+      ? "fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 sm:top-auto sm:bottom-full sm:mb-2"
+      : "fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 mt-2 top-auto"
 
   return (
     <>
@@ -52,16 +62,13 @@ const ThemeSelector = () => {
         </button>
 
         {open && (
-          <div className="
-            fixed sm:absolute
-            left-4 right-4 sm:left-auto sm:right-0
-            mt-2 sm:mt-2
-            top-auto
+          <div className={`
+            ${position}
             bg-base-200 rounded-2xl shadow-2xl p-2
             sm:w-56
             max-h-[60vh] overflow-y-auto
             z-50
-          ">
+          `}>
             <p className="text-xs font-bold uppercase opacity-50 px-2 py-1 sticky top-0 bg-base-200 z-10">
               Thème
             </p>

@@ -173,10 +173,10 @@ export async function getBusinessbi(_email?: string) {
 export async function getBusinessName(email: string): Promise<string> {
     try {
         const businessbi = await getBusinessbi(email)
-        return businessbi?.name || "ASSURANCE.COM"
+        return businessbi?.name || "TUDANDAZE.COM"
     } catch (error) {
         console.error(error)
-        return "ASSURANCE.COM"
+        return "TUDANDAZE.COM"
     }
 }
 

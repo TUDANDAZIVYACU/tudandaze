@@ -416,25 +416,25 @@ const DettesPage = () => {
           </div>
         </div>
 
-        {/* Bilan de la sélection */}
-        <section className='grid grid-cols-3 divide-x divide-base-300 rounded-2xl border border-base-300 bg-base-100'>
-          <div className='p-3 md:p-5'>
+        {/* Bilan de la sélection : trois cartes */}
+        <section className='grid grid-cols-3 gap-3'>
+          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
             <p className='text-xs font-normal opacity-70 md:text-sm'>Dettes totales</p>
             <p className='text-lg font-bold tabular-nums md:text-3xl'>{totalDu.toLocaleString()}</p>
           </div>
-          <div className='p-3 md:p-5'>
+          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
             <p className='text-xs font-normal opacity-70 md:text-sm'>Déjà payé</p>
             <p className='text-lg font-bold tabular-nums text-success md:text-3xl'>{totalPaye.toLocaleString()}</p>
           </div>
-          <div className='p-3 md:p-5'>
+          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
             <p className='text-xs font-normal opacity-70 md:text-sm'>Reste à payer</p>
             <p className='text-lg font-bold tabular-nums text-error md:text-3xl'>{totalRestant.toLocaleString()}</p>
           </div>
         </section>
 
         {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
-        <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl border border-base-300 bg-base-100 p-3 md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
-          <label className={`${champ} col-span-3 md:col-span-1`}>
+        <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm lg:grid-cols-[2fr_1fr_1fr_auto] lg:p-4'>
+          <label className={`${champ} col-span-3 lg:col-span-1`}>
             <span className={libelle}>Statut ou débiteur</span>
             <select
               className='select select-bordered w-full'
@@ -479,11 +479,11 @@ const DettesPage = () => {
             type='button'
             aria-label="Réinitialiser les filtres"
             title="Réinitialiser"
-            className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 md:mb-0 md:h-12 md:px-3 md:font-semibold'
+            className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 lg:mb-0 lg:h-12 lg:px-3 lg:font-semibold'
             onClick={resetFiltres}
           >
             <RotateCcw className='h-5 w-5' />
-            <span className='hidden md:inline'>Réinitialiser</span>
+            <span className='hidden lg:inline'>Réinitialiser</span>
           </button>
         </section>
 
@@ -491,13 +491,13 @@ const DettesPage = () => {
         <section>
           <div className='mb-2 flex items-baseline justify-between gap-3 px-1'>
             <h2 className='font-bold'>Liste des dettes</h2>
-            <p className='text-sm font-normal opacity-60'>
+            <span className='badge badge-primary badge-soft font-bold'>
               {filtered.length} dette{filtered.length > 1 ? 's' : ''}
-            </p>
+            </span>
           </div>
 
           {filtered.length > 0 ? (
-            <div className='divide-y divide-base-300 rounded-2xl border border-base-300 bg-base-100'>
+            <div className='divide-y divide-base-300 rounded-2xl bg-base-100 shadow-sm'>
               {filtered.map((dette) => {
                 const restant = dette.montant - dette.montantPaye
                 const progression = dette.montant > 0

@@ -7,8 +7,14 @@ import { nettoyerContact, verifierIdentifiantsLibres } from "@/lib/contacts"
 import { executer } from "@/lib/resultat"
 import { withRetry } from "@/lib/retry"
 import { accesAvecCache } from "@/lib/acces-cache"
+import { abonnementsDesClients, bornesDates, historiquePaiements, SANS_ABONNEMENT } from "@/lib/stats-abonnement"
 
-const ROLES_AGENTVENDEUR = ["ADMIN", "LECTEUR"]
+const MESSAGES_SURS = [
+    "Non connecté.",
+    "Accès réservé aux propriétaires de l'application.",
+    "Date invalide (format attendu : AAAA-MM-JJ).",
+    "La date de début doit être avant la date de fin."
+]
 
 // Toutes les fonctions de ce fichier sont réservées aux propriétaires de l'application
 // (emails listés dans SUPER_ADMIN_EMAILS). L'identité est lue côté serveur (Clerk).
@@ -32,24 +38,13 @@ function genererCodeAgentVendeur(nom: string): string {
     return `${prefixe}${suffixe}`
 }
 
-// Liste des agentvendeurs avec leurs utilisateurs et leur nombre de clients
+// Liste des agentvendeurs avec leur nombre de clients
 export async function getAgentVendeurs() {
     await exigerOwner()
     const agentvendeurs = await withRetry(() =>
         prisma.agentvendeur.findMany({
             include: {
-                _count: { select: { clients: true } },
-                utilisateurs: {
-                    select: {
-                        id: true,
-                        email: true,
-                        telephone: true,
-                        nom: true,
-                        role: true,
-                        clerkUserId: true
-                    },
-                    orderBy: { createdAt: "asc" }
-                }
+                _count: { select: { clients: true } }
             },
             orderBy: { nom: "asc" }
         })
@@ -62,15 +57,7 @@ export async function getAgentVendeurs() {
         telephone: a.telephone,
         actif: a.actif,
         createdAt: a.createdAt,
-        nombreClients: a._count.clients,
-        utilisateurs: a.utilisateurs.map(u => ({
-            id: u.id,
-            email: u.email,
-            telephone: u.telephone,
-            nom: u.nom,
-            role: u.role,
-            connecte: !!u.clerkUserId
-        }))
+        nombreClients: a._count.clients
     }))
 }
 
@@ -132,61 +119,13 @@ export async function basculerAgentVendeurActif(agentvendeurId: string, actif: b
     })
 }
 
-// Ajoute un utilisateur à un agentvendeur
-export async function ajouterUtilisateurAgentVendeur(
-    agentvendeurId: string,
-    data: { email?: string; telephone?: string; nom?: string; role?: string }
-) {
-    return executer(async () => {
-        await exigerOwner()
-
-        const role = data.role ?? "LECTEUR"
-        if (!ROLES_AGENTVENDEUR.includes(role)) throw new Error("Rôle invalide.")
-
-        const agentvendeur = await withRetry(() =>
-            prisma.agentvendeur.findUnique({ where: { id: agentvendeurId }, select: { id: true } })
-        )
-        if (!agentvendeur) throw new Error("AgentVendeur introuvable.")
-
-        const contact = nettoyerContact(data.email, data.telephone)
-        await verifierIdentifiantsLibres(contact)
-
-        await withRetry(() =>
-            prisma.agentvendeurUser.create({
-                data: {
-                    agentvendeurId,
-                    email: contact.email,
-                    telephone: contact.telephone,
-                    nom: data.nom?.trim() || null,
-                    role
-                }
-            })
-        )
-    })
-}
-
-// Retire un utilisateur d'un agentvendeur (jamais le dernier : l'agentvendeur doit garder un accès)
-export async function supprimerUtilisateurAgentVendeur(utilisateurId: string) {
-    return executer(async () => {
-        await exigerOwner()
-
-        const utilisateur = await withRetry(() =>
-            prisma.agentvendeurUser.findUnique({ where: { id: utilisateurId } })
-        )
-        if (!utilisateur) throw new Error("Utilisateur introuvable.")
-
-        const nombre = await withRetry(() =>
-            prisma.agentvendeurUser.count({ where: { agentvendeurId: utilisateur.agentvendeurId } })
-        )
-        if (nombre <= 1) throw new Error("Impossible de supprimer le seul utilisateur de cet agentvendeur.")
-
-        await withRetry(() => prisma.agentvendeurUser.delete({ where: { id: utilisateurId } }))
-    })
-}
-
-// Tous les clients, avec leur agentvendeur (pour rattacher les clients existants)
-export async function getClientsOwner() {
+// Tous les clients, avec leur agentvendeur et leur abonnement (pour rattacher les clients existants et suivre les paiements) :
+// - montantEnCours : paiements confirmés dont la période payée est encore en cours, quelles que soient les dates ;
+// - montantPaye / nombrePaiements : paiements confirmés faits entre dateDebut et dateFin (sans dates : tous les paiements).
+export async function getClientsOwner(dateDebut?: string, dateFin?: string) {
     await exigerOwner()
+    const bornes = bornesDates(dateDebut, dateFin)
+
     const clients = await withRetry(() =>
         prisma.businessbi.findMany({
             select: {
@@ -194,24 +133,51 @@ export async function getClientsOwner() {
                 name: true,
                 email: true,
                 telephone: true,
-                numeroPolice: true,
                 accesActif: true,
                 agentvendeur: { select: { id: true, nom: true, code: true } }
             },
             orderBy: { name: "asc" }
         })
     )
+
+    const infos = await abonnementsDesClients(clients.map(c => c.id), bornes)
+
     return clients.map(c => ({
         id: c.id,
         name: c.name,
         email: c.email,
         telephone: c.telephone,
-        numeroPolice: c.numeroPolice,
         accesActif: c.accesActif,
         agentvendeurId: c.agentvendeur?.id ?? null,
         agentvendeurNom: c.agentvendeur?.nom ?? null,
-        agentvendeurCode: c.agentvendeur?.code ?? null
+        agentvendeurCode: c.agentvendeur?.code ?? null,
+        ...(infos.get(c.id) ?? SANS_ABONNEMENT)
     }))
+}
+
+// Historique des paiements d'abonnement d'un client (du plus récent au plus ancien),
+// éventuellement limité à une période (dates AAAA-MM-JJ, bornes incluses)
+export async function getPaiementsClientOwner(clientId: string, dateDebut?: string, dateFin?: string) {
+    try {
+        await exigerOwner()
+        const bornes = bornesDates(dateDebut, dateFin)
+
+        const client = await withRetry(() =>
+            prisma.businessbi.findUnique({ where: { id: clientId }, select: { id: true } })
+        )
+        if (!client) return { success: false as const, message: "Client introuvable." }
+
+        return { success: true as const, paiements: await historiquePaiements(client.id, bornes) }
+    } catch (error) {
+        console.error(error)
+        const message = error instanceof Error ? error.message : ""
+        return {
+            success: false as const,
+            message: MESSAGES_SURS.includes(message)
+                ? message
+                : "Erreur réseau ou serveur. Réessayez dans un instant."
+        }
+    }
 }
 
 // Rattache un client à un agentvendeur (ou le détache avec agentvendeurId = null)

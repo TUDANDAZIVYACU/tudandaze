@@ -1,14 +1,13 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import Wrapper from '../components/Wrapper'
+import { CelluleAbonnement, PaiementsClientModal, type AbonnementInfo } from '../components/abonnement-ui'
 import {
   getMonAgentVendeur,
   getClientsAgentVendeur,
-  basculerAccesClient,
-  importerClientsAgentVendeur
+  getPaiementsClient,
+  basculerAccesClient
 } from '../actions-agentvendeur'
-import { lireClientsExcel } from '@/lib/lire-clients-excel'
 
 type MonAgentVendeur = {
   id: string
@@ -22,21 +21,17 @@ type ClientRow = {
   name: string
   email: string | null
   telephone: string | null
-  numeroPolice: string | null
-  nif: string | null
   accesActif: boolean
   createdAt: Date
-  nombreProduits: number
+  abonnement: AbonnementInfo
+  // Paiements confirmés dont la période payée est encore en cours (0 pour un essai ou un abonnement expiré)
+  montantEnCours: number
+  // Paiements confirmés faits sur la période choisie (toutes dates si aucune date) et leur nombre
+  montantPaye: number
+  nombrePaiements: number
 }
 
-type ResultatImport = {
-  erreur?: string
-  ajoutes: number
-  misAJour: number
-  ignores: { ligne: number; nom: string; raison: string }[]
-}
-
-// Fiche importée par l'agentvendeur (Excel) qui attend l'inscription du client : ni email ni téléphone de connexion
+// Fiche qui attend l'inscription du client : ni email ni téléphone de connexion
 const estEnAttente = (c: ClientRow) => !c.email && !c.telephone
 
 const page = () => {
@@ -46,25 +41,41 @@ const page = () => {
   const [erreurChargement, setErreurChargement] = useState(false)
   const [recherche, setRecherche] = useState('')
   const [codeCopie, setCodeCopie] = useState(false)
-  const [importEnCours, setImportEnCours] = useState(false)
-  const [resultatImport, setResultatImport] = useState<ResultatImport | null>(null)
-  const fichierRef = useRef<HTMLInputElement>(null)
+  // Filtre par dates des paiements (vide = toutes les dates)
+  const [dateDebut, setDateDebut] = useState('')
+  const [dateFin, setDateFin] = useState('')
+  const derniereRequete = useRef(0)
+  // Fenêtre « Paiements » d'un client
+  const [clientPaiements, setClientPaiements] = useState<ClientRow | null>(null)
 
   const estAdmin = agentvendeur?.role === 'ADMIN'
+  const datesInvalides = !!dateDebut && !!dateFin && dateDebut > dateFin
+  const filtreDatesActif = !!dateDebut || !!dateFin
 
   const charger = useCallback(async () => {
+    // Dates incohérentes : on garde l'affichage actuel et on avertit sous les champs
+    if (dateDebut && dateFin && dateDebut > dateFin) {
+      setLoading(false)
+      return
+    }
+    // Si l'utilisateur change encore les dates avant la réponse, l'ancienne réponse est ignorée
+    const numero = ++derniereRequete.current
     try {
-      const [infos, liste] = await Promise.all([getMonAgentVendeur(), getClientsAgentVendeur()])
+      const [infos, liste] = await Promise.all([
+        getMonAgentVendeur(),
+        getClientsAgentVendeur(dateDebut || undefined, dateFin || undefined)
+      ])
+      if (numero !== derniereRequete.current) return
       setAgentVendeur(infos)
       setClients(liste as ClientRow[])
       setErreurChargement(false)
     } catch (error) {
       console.error(error)
-      setErreurChargement(true)
+      if (numero === derniereRequete.current) setErreurChargement(true)
     } finally {
-      setLoading(false)
+      if (numero === derniereRequete.current) setLoading(false)
     }
-  }, [])
+  }, [dateDebut, dateFin])
 
   useEffect(() => {
     charger()
@@ -79,51 +90,6 @@ const page = () => {
     } catch (error) {
       console.error(error)
       alert(`Code : ${agentvendeur.code}`)
-    }
-  }
-
-  // Lit le fichier Excel (Nom de l'entreprise, RC, NIF) puis enregistre les clients
-  const importerExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fichier = e.target.files?.[0]
-    e.target.value = '' // permet de re-choisir le même fichier après correction
-    if (!fichier) return
-
-    const echec = (erreur: string) => setResultatImport({ erreur, ajoutes: 0, misAJour: 0, ignores: [] })
-
-    if (!/\.xlsx$/i.test(fichier.name)) {
-      echec("Choisissez un fichier Excel au format .xlsx (Fichier → Enregistrer sous → Classeur Excel).")
-      return
-    }
-    if (fichier.size > 1024 * 1024) {
-      echec('Fichier trop lourd (1 Mo maximum).')
-      return
-    }
-
-    setImportEnCours(true)
-    setResultatImport(null)
-    try {
-      const lignes = await lireClientsExcel(fichier)
-      if (lignes.length === 0) {
-        echec('Le fichier ne contient aucun client sous la ligne des titres.')
-        return
-      }
-      const res = await importerClientsAgentVendeur(lignes)
-      if (!res.success) {
-        echec(res.message)
-        return
-      }
-      setResultatImport({ ajoutes: res.ajoutes, misAJour: res.misAJour, ignores: res.ignores })
-      await charger()
-    } catch (error) {
-      console.error(error)
-      const message = error instanceof Error ? error.message : ''
-      echec(
-        message.startsWith('Colonnes introuvables') || message.startsWith('Le fichier')
-          ? message
-          : 'Impossible de lire ce fichier : vérifiez qu\'il s\'agit bien d\'un classeur Excel (.xlsx).'
-      )
-    } finally {
-      setImportEnCours(false)
     }
   }
 
@@ -147,7 +113,7 @@ const page = () => {
   const clientsFiltres = clients.filter((c) => {
     const texte = recherche.trim().toLowerCase()
     if (!texte) return true
-    return [c.name, c.email, c.telephone, c.numeroPolice, c.nif]
+    return [c.name, c.email, c.telephone]
       .filter(Boolean)
       .some((valeur) => (valeur as string).toLowerCase().includes(texte))
   })
@@ -181,6 +147,12 @@ const page = () => {
   const enAttente = clients.filter(estEnAttente).length
   // Un client « en attente » n'est pas encore inscrit : il n'a pas d'accès en cours
   const accesActifs = clients.filter((c) => c.accesActif && !estEnAttente(c)).length
+  // Sans dates : montant des abonnements payés encore en cours (période payée) ; avec dates : paiements confirmés de la période
+  const abonnementsPayes = clients.filter((c) => c.montantEnCours > 0)
+  const nombrePaiements = clients.reduce((total, c) => total + c.nombrePaiements, 0)
+  const totalAbonnements = filtreDatesActif
+    ? clients.reduce((total, c) => total + c.montantPaye, 0)
+    : clients.reduce((total, c) => total + c.montantEnCours, 0)
 
   return (
     <Wrapper>
@@ -190,78 +162,44 @@ const page = () => {
           ESPACE AGENTVENDEUR — {agentvendeur.nom}
         </h1>
 
-        {/* CODE AGENTVENDEUR : à donner aux clients, qui s'enregistrent eux-mêmes */}
-        {estAdmin && (
-          <div className='border-2 border-base-200 rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3'>
-            <div>
-              <p className='text-xs uppercase text-gray-600'>Votre code agentvendeur</p>
-              <p className='text-2xl font-black text-success tracking-widest'>{agentvendeur.code}</p>
-              <p className='text-xs text-gray-600 normal-case'>
-                Donnez ce code à vos clients : ils créent leur compte et s&apos;enregistrent eux-mêmes.
-              </p>
-              <p className='text-xs text-gray-600 normal-case'>
-                Ou importez votre liste (Excel : Nom de l&apos;entreprise, RC, NIF) : ils complètent le reste à leur inscription.
-              </p>
-            </div>
-            <div className='flex flex-wrap items-center gap-2'>
-              <button className='btn btn-sm btn-primary' onClick={copierCode}>
-                {codeCopie ? 'COPIÉ ✓' : 'COPIER LE CODE'}
-              </button>
+        {/* FILTRE PAR DATES : période des paiements d'abonnement comptés dans le total */}
+        <div className='border-2 border-base-200 rounded-3xl p-3'>
+          <div className='flex flex-wrap items-end gap-3'>
+            <label className='flex flex-col gap-1'>
+              <span className='text-xs uppercase text-gray-600'>Paiements du</span>
               <input
-                ref={fichierRef}
-                type='file'
-                accept='.xlsx'
-                className='hidden'
-                onChange={importerExcel}
+                type='date'
+                className='input input-bordered input-sm'
+                value={dateDebut}
+                onChange={(e) => setDateDebut(e.target.value)}
               />
+            </label>
+            <label className='flex flex-col gap-1'>
+              <span className='text-xs uppercase text-gray-600'>Au</span>
+              <input
+                type='date'
+                className='input input-bordered input-sm'
+                value={dateFin}
+                onChange={(e) => setDateFin(e.target.value)}
+              />
+            </label>
+            {filtreDatesActif && (
               <button
-                className='btn btn-sm btn-secondary'
-                disabled={importEnCours}
-                onClick={() => fichierRef.current?.click()}
+                type='button'
+                className='btn btn-sm btn-ghost'
+                onClick={() => { setDateDebut(''); setDateFin('') }}
               >
-                {importEnCours ? <span className='loading loading-spinner loading-xs'></span> : 'IMPORTER (EXCEL)'}
+                TOUTES LES DATES
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* RÉSULTAT DE L'IMPORT */}
-        {resultatImport && (
-          <div className='border-2 border-base-200 rounded-3xl p-4 space-y-2'>
-            <div className='flex items-center justify-between'>
-              <p className='text-sm uppercase text-gray-600'>Résultat de l&apos;import</p>
-              <button className='btn btn-xs btn-ghost' onClick={() => setResultatImport(null)}>FERMER</button>
-            </div>
-
-            {resultatImport.erreur ? (
-              <p className='text-sm text-error normal-case'>{resultatImport.erreur}</p>
-            ) : (
-              <>
-                <p className='text-sm normal-case'>
-                  <span className='text-success'>{resultatImport.ajoutes} client(s) ajouté(s)</span>
-                  {resultatImport.misAJour > 0 && (
-                    <span className='text-gray-600'> · {resultatImport.misAJour} fiche(s) mise(s) à jour</span>
-                  )}
-                  {resultatImport.ignores.length > 0 && (
-                    <span className='text-error'> · {resultatImport.ignores.length} ligne(s) ignorée(s)</span>
-                  )}
-                </p>
-                {resultatImport.ignores.length > 0 && (
-                  <ul className='text-xs text-gray-600 normal-case space-y-0.5 max-h-40 overflow-y-auto'>
-                    {resultatImport.ignores.map((i, index) => (
-                      <li key={`${i.ligne}-${index}`}>
-                        Ligne {i.ligne} ({i.nom}) : {i.raison}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
             )}
           </div>
-        )}
+          {datesInvalides && (
+            <p className='mt-2 text-xs text-error normal-case'>La date de début doit être avant la date de fin.</p>
+          )}
+        </div>
 
         {/* RÉSUMÉ */}
-        <div className='grid md:grid-cols-2 gap-3'>
+        <div className='grid md:grid-cols-3 gap-3'>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center'>
             <p className='text-xs uppercase text-gray-600'>Clients</p>
             <p className='text-2xl font-black text-red'>{clients.length}</p>
@@ -273,7 +211,37 @@ const page = () => {
             <p className='text-xs uppercase text-gray-600'>Accès actifs</p>
             <p className='text-2xl font-black text-success'>{accesActifs}</p>
           </div>
+          <div className='border-2 border-base-200 rounded-3xl p-4 text-center'>
+            <p className='text-xs uppercase text-gray-600'>
+              {filtreDatesActif ? 'Paiements sur la période' : 'Abonnements actifs'}
+            </p>
+            <p className='text-2xl font-black text-success tabular-nums'>
+              {totalAbonnements.toLocaleString('fr-FR')}{' '}
+              <span className='text-sm font-bold text-gray-600'>FBU</span>
+            </p>
+            <p className='text-xs text-gray-600 normal-case'>
+              {filtreDatesActif
+                ? `${nombrePaiements} paiement${nombrePaiements > 1 ? 's' : ''} confirmé${nombrePaiements > 1 ? 's' : ''}`
+                : `${abonnementsPayes.length} abonnement${abonnementsPayes.length > 1 ? 's' : ''} payé${abonnementsPayes.length > 1 ? 's' : ''} en cours`}
+            </p>
+          </div>
         </div>
+
+        {/* CODE AGENTVENDEUR : à donner aux clients, qui s'enregistrent eux-mêmes */}
+        {estAdmin && (
+          <div className='border-2 border-base-200 rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3'>
+            <div>
+              <p className='text-xs uppercase text-gray-600'>Votre code agentvendeur</p>
+              <p className='text-2xl font-black text-success tracking-widest'>{agentvendeur.code}</p>
+              <p className='text-xs text-gray-600 normal-case'>
+                Donnez ce code à vos clients : ils créent leur compte et s&apos;enregistrent eux-mêmes.
+              </p>
+            </div>
+            <button className='btn btn-sm btn-primary' onClick={copierCode}>
+              {codeCopie ? 'COPIÉ ✓' : 'COPIER LE CODE'}
+            </button>
+          </div>
+        )}
 
         {/* MES CLIENTS */}
         <div className='border-2 border-base-200 rounded-3xl p-4'>
@@ -290,7 +258,7 @@ const page = () => {
 
           {clients.length === 0 && (
             <p className='text-sm text-gray-500 normal-case'>
-              Aucun client pour le moment.{estAdmin ? ' Importez votre liste Excel, ou donnez votre code à vos clients : ils apparaîtront ici dès leur inscription.' : ''}
+              Aucun client pour le moment.{estAdmin ? ' Donnez votre code à vos clients : ils apparaîtront ici dès leur inscription.' : ''}
             </p>
           )}
 
@@ -305,8 +273,7 @@ const page = () => {
                   <tr className='text-xs uppercase text-gray-600'>
                     <th>Client</th>
                     <th>Contact</th>
-                    <th>RC</th>
-                    <th>Produits</th>
+                    <th>Abonnement</th>
                     <th>Accès</th>
                     <th></th>
                   </tr>
@@ -320,11 +287,9 @@ const page = () => {
                         {c.telephone && <div>{c.telephone}</div>}
                         {estEnAttente(c) && <div className='text-gray-500'>—</div>}
                       </td>
-                      <td className='text-xs'>
-                        <div>{c.numeroPolice ?? '—'}</div>
-                        {c.nif && <div className='text-[10px] text-gray-500'>NIF {c.nif}</div>}
+                      <td>
+                        <CelluleAbonnement abonnement={c.abonnement} />
                       </td>
-                      <td>{c.nombreProduits}</td>
                       <td>
                         {estEnAttente(c) ? (
                           <span className='badge badge-warning'>En attente</span>
@@ -335,18 +300,9 @@ const page = () => {
                         )}
                       </td>
                       <td className='whitespace-nowrap'>
-                        <Link
-                          href={`/agentvendeur/variation/${c.id}`}
-                          className='btn btn-xs btn-secondary mr-1'
-                        >
-                          IN/OUT
-                        </Link>
-                        <Link
-                          href={`/agentvendeur/stock/${c.id}`}
-                          className='btn btn-xs btn-primary mr-1'
-                        >
-                          STOCK
-                        </Link>
+                        <button className='btn btn-xs btn-secondary mr-1' onClick={() => setClientPaiements(c)}>
+                          PAIEMENTS
+                        </button>
                         {estAdmin && (
                           <button className='btn btn-xs btn-ghost' onClick={() => basculer(c)}>
                             {c.accesActif ? 'SUSPENDRE' : 'RÉACTIVER'}
@@ -361,6 +317,18 @@ const page = () => {
           )}
         </div>
       </div>
+
+      {/* FENÊTRE : HISTORIQUE DES PAIEMENTS D'UN CLIENT */}
+      {clientPaiements && (
+        <PaiementsClientModal
+          key={clientPaiements.id}
+          clientNom={clientPaiements.name}
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          charger={() => getPaiementsClient(clientPaiements.id, dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setClientPaiements(null)}
+        />
+      )}
     </Wrapper>
   )
 }

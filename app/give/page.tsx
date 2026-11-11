@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { OrderItem, Product, VenteForPrint } from '@/type'
 import { useUser } from '@clerk/nextjs'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -264,10 +264,11 @@ const page = () => {
 
     return (
         <Wrapper>
-            <div className='grid gap-4 pb-28 md:grid-cols-12 md:pb-0 print:hidden'>
+            {/* Deux colonnes (produits / panier) à partir de xl : avec la barre latérale, md et lg sont trop étroits */}
+            <div className='grid gap-4 pb-28 xl:grid-cols-12 xl:pb-0 print:hidden'>
 
                 {/* ───────── GAUCHE : recherche et produits ───────── */}
-                <section className='md:col-span-5'>
+                <section className='xl:col-span-5'>
                     <h1 className='text-2xl font-bold leading-tight md:text-3xl'>Vente</h1>
                     <p className='mb-3 text-sm font-normal opacity-60'>
                         <span className='hidden md:inline'>Entrée ajoute le premier résultat. </span>
@@ -302,7 +303,7 @@ const page = () => {
                     <div className='mt-3'>
                         {resultatsAffiches.length > 0 ? (
                             <>
-                                <div className='grid grid-cols-2 gap-2 md:grid-cols-1 xl:grid-cols-2'>
+                                <div className='grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2'>
                                     {resultatsAffiches.map((product) => {
                                         const stock = product.quantity ?? 0
                                         const prix = product.prixVente || product.price || 0
@@ -315,7 +316,7 @@ const page = () => {
                                                 className={`relative rounded-2xl border p-3 text-left transition active:scale-[0.98] ${
                                                     dansPanier > 0
                                                         ? 'border-primary bg-primary/10'
-                                                        : 'border-base-300 bg-base-100 hover:border-primary'
+                                                        : 'border-transparent bg-base-100 shadow-sm hover:border-primary'
                                                 }`}
                                             >
                                                 {dansPanier > 0 && (
@@ -345,8 +346,8 @@ const page = () => {
                 </section>
 
                 {/* ───────── DROITE : panier et paiement ───────── */}
-                <section className='md:col-span-7'>
-                    <div className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'>
+                <section className='xl:col-span-7'>
+                    <div className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
 
                         {derniereFacture && (
                             <div className='mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-success bg-success/10 p-3'>
@@ -527,7 +528,7 @@ const page = () => {
                                     </div>
 
                                     {/* Paiement */}
-                                    <div className='space-y-2 rounded-2xl border border-base-300 p-3'>
+                                    <div className='space-y-2 rounded-2xl bg-base-200 p-3'>
                                         <label htmlFor='montantPaye' className='text-sm font-normal opacity-70'>Montant payé par le client</label>
                                         <div className='flex gap-2'>
                                             <input
@@ -615,11 +616,12 @@ const page = () => {
                 </section>
             </div>
 
-            {/* Barre fixe en bas sur téléphone : total + accès rapide au paiement */}
+            {/* Barre fixe en bas : total + accès rapide au paiement.
+                Téléphone : posée juste au-dessus de la barre de navigation. md et lg : au bas de l'écran, à droite de la barre latérale.
+                Cachée à partir de xl, où le panier est visible à côté des produits. */}
             {order.length > 0 && (
                 <div
-                    className='fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t border-base-300 bg-base-100 px-4 pt-3 md:hidden print:hidden'
-                    style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+                    className='fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom,0px))] z-40 flex items-center gap-3 border-t border-base-300 bg-base-100 px-4 py-3 shadow-lg md:bottom-0 md:left-64 md:pl-8 xl:hidden print:hidden'
                 >
                     <div className='min-w-0 flex-1'>
                         <p className='text-xs font-normal opacity-60'>{nombreArticles} article{nombreArticles > 1 ? 's' : ''}</p>

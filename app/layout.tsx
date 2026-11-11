@@ -5,7 +5,7 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata: Metadata = {
-  title: "ASSURANCE.COM",
+  title: "TUDANDAZE.COM",
   description: "Gestion de stock intelligente pour entreprises",
 };
 
@@ -16,8 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <ClerkProvider>
-      <html lang="fr" data-theme="retro">
-        <body className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <html lang="fr" data-theme="ciel">
+        <body
+          className={`${GeistSans.variable} ${GeistMono.variable} min-h-screen bg-base-200 text-base-content antialiased`}
+        >
           {children}
         </body>
       </html>

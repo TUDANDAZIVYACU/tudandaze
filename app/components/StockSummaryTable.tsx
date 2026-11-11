@@ -41,7 +41,7 @@ const StockSummaryTable = ({ email, dateFiltre, donnees }: {
     if (!data) {
         return (
             <section
-                className='space-y-4 rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'
+                className='space-y-4 rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'
                 aria-busy='true'
                 aria-label="Chargement de l'état du stock"
             >
@@ -68,12 +68,12 @@ const StockSummaryTable = ({ email, dateFiltre, donnees }: {
     const resume = segments.map((s) => `${s.nombre} ${s.libelle.toLowerCase()}`).join(', ')
 
     return (
-        <section className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'>
+        <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
             <div className='flex items-baseline justify-between gap-3'>
                 <h2 className='text-lg font-bold'>État du stock</h2>
-                <p className='text-sm font-normal font-bold '>
+                <span className='badge badge-primary badge-soft font-bold'>
                     {total} produit{total > 1 ? 's' : ''}
-                </p>
+                </span>
             </div>
 
             {/* Répartition du stock */}

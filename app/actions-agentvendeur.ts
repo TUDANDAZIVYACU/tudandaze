@@ -7,14 +7,13 @@ import { calculerStock, dateValide, finDeJournee } from "@/lib/stock"
 import { nettoyerContact, verifierIdentifiantsLibres } from "@/lib/contacts"
 import { executer } from "@/lib/resultat"
 import { withRetry } from "@/lib/retry"
-import { MAX_LIGNES_IMPORT, planifierImport, type LigneImport } from "@/lib/import-clients"
 import { accesAvecCache } from "@/lib/acces-cache"
+import { abonnementsDesClients, bornesDates, historiquePaiements, SANS_ABONNEMENT } from "@/lib/stats-abonnement"
 
 // Toutes les fonctions de ce fichier lisent l'identité côté serveur (Clerk) :
 // aucun email ni identifiant envoyé par le navigateur n'est cru.
 // Un agentvendeur ne voit et ne modifie que SES clients.
-// Les clients s'enregistrent eux-mêmes avec son code (actions-inscription.ts),
-// ou sont importés par l'agentvendeur depuis un fichier Excel (importerClientsAgentVendeur) puis complétés à leur inscription.
+// Les clients s'enregistrent eux-mêmes avec son code (actions-inscription.ts).
 async function exigerAgentVendeur(ecriture = false) {
     const user = await currentUser()
     if (!user) throw new Error("Non connecté.")
@@ -47,10 +46,22 @@ export async function getMonAgentVendeur() {
     return { ...agentvendeur, role: acces.role }
 }
 
-// Liste des clients de l'agentvendeur
-// (un client sans email ni téléphone est une fiche importée qui attend l'inscription du client)
-export async function getClientsAgentVendeur() {
+const MESSAGES_SURS = [
+    "Non connecté.",
+    "Accès réservé aux agentvendeurs.",
+    "Action réservée aux administrateurs de l'agentvendeur.",
+    "Date invalide (format attendu : AAAA-MM-JJ).",
+    "La date de début doit être avant la date de fin."
+]
+
+// Liste des clients de l'agentvendeur, avec l'état de leur abonnement et leurs paiements confirmés :
+// - montantEnCours : paiements confirmés dont la période payée est encore en cours (abonnement actif), quelles que soient les dates ;
+// - montantPaye / nombrePaiements : paiements confirmés faits entre dateDebut et dateFin (sans dates : tous les paiements).
+// (un client sans email ni téléphone est une fiche qui attend l'inscription du client)
+export async function getClientsAgentVendeur(dateDebut?: string, dateFin?: string) {
     const acces = await exigerAgentVendeur()
+    const bornes = bornesDates(dateDebut, dateFin)
+
     const clients = await withRetry(() =>
         prisma.businessbi.findMany({
             where: { agentvendeurId: acces.agentvendeurId },
@@ -59,98 +70,41 @@ export async function getClientsAgentVendeur() {
                 name: true,
                 email: true,
                 telephone: true,
-                numeroPolice: true,
-                nif: true,
                 accesActif: true,
-                createdAt: true,
-                _count: { select: { products: true } }
+                createdAt: true
             },
             orderBy: { name: "asc" }
         })
     )
-    return clients.map(c => ({
-        id: c.id,
-        name: c.name,
-        email: c.email,
-        telephone: c.telephone,
-        numeroPolice: c.numeroPolice,
-        nif: c.nif,
-        accesActif: c.accesActif,
-        createdAt: c.createdAt,
-        nombreProduits: c._count.products
-    }))
+
+    const infos = await abonnementsDesClients(clients.map(c => c.id), bornes)
+    return clients.map(c => ({ ...c, ...(infos.get(c.id) ?? SANS_ABONNEMENT) }))
 }
 
-const MESSAGES_IMPORT_SURS = [
-    "Non connecté.",
-    "Accès réservé aux agentvendeurs.",
-    "Action réservée aux administrateurs de l'agentvendeur."
-]
-
-// Importe une liste de clients (Nom de l'entreprise, RC, NIF) lue dans un fichier Excel par le navigateur.
-// Chaque client importé est une fiche « en attente » : le client la complète (propriétaire, téléphone, secteur…)
-// et la rattache à son compte quand il demande à rejoindre son agentvendeur (actions-inscription.ts).
-// Ré-importer un fichier corrigé met à jour les fiches encore en attente ; les clients déjà inscrits ne sont jamais modifiés.
-export async function importerClientsAgentVendeur(lignes: LigneImport[]) {
+// Historique des paiements d'abonnement d'un client de l'agentvendeur (du plus récent au plus ancien),
+// éventuellement limité à une période (dates AAAA-MM-JJ, bornes incluses)
+export async function getPaiementsClient(clientId: string, dateDebut?: string, dateFin?: string) {
     try {
-        const acces = await exigerAgentVendeur(true)
+        const acces = await exigerAgentVendeur()
+        const bornes = bornesDates(dateDebut, dateFin)
 
-        if (!Array.isArray(lignes) || lignes.length === 0) {
-            return { success: false as const, message: "Le fichier ne contient aucun client à importer." }
-        }
-        if (lignes.length > MAX_LIGNES_IMPORT) {
-            return {
-                success: false as const,
-                message: `Trop de lignes (${MAX_LIGNES_IMPORT} maximum par import). Découpez votre fichier.`
-            }
-        }
-
-        const existants = await withRetry(() =>
-            prisma.businessbi.findMany({
-                where: { agentvendeurId: acces.agentvendeurId },
-                select: { id: true, name: true, numeroPolice: true, nif: true, email: true, telephone: true }
+        const client = await withRetry(() =>
+            prisma.businessbi.findFirst({
+                where: { id: clientId, agentvendeurId: acces.agentvendeurId },
+                select: { id: true }
             })
         )
+        if (!client) return { success: false as const, message: "Client introuvable." }
 
-        const plan = planifierImport(lignes, existants)
-
-        if (plan.aCreer.length > 0) {
-            await withRetry(() =>
-                prisma.businessbi.createMany({
-                    data: plan.aCreer.map((c) => ({
-                        name: c.nom,
-                        numeroPolice: c.rc,
-                        nif: c.nif,
-                        agentvendeurId: acces.agentvendeurId
-                    }))
-                })
-            )
-        }
-
-        // Seules les fiches encore en attente (sans email ni téléphone) peuvent être mises à jour
-        for (const m of plan.aMettreAJour) {
-            await withRetry(() =>
-                prisma.businessbi.updateMany({
-                    where: { id: m.id, agentvendeurId: acces.agentvendeurId, email: null, telephone: null },
-                    data: { name: m.nom, nif: m.nif }
-                })
-            )
-        }
-
-        return {
-            success: true as const,
-            ajoutes: plan.aCreer.length,
-            misAJour: plan.aMettreAJour.length,
-            ignores: plan.ignores
-        }
+        return { success: true as const, paiements: await historiquePaiements(client.id, bornes) }
     } catch (error) {
         console.error(error)
         const message = error instanceof Error ? error.message : ""
         return {
             success: false as const,
-            message: MESSAGES_IMPORT_SURS.includes(message)
+            message: MESSAGES_SURS.includes(message)
                 ? message
-                : "Erreur réseau ou serveur pendant l'import. Réessayez dans un instant."
+                : "Erreur réseau ou serveur. Réessayez dans un instant."
         }
     }
 }

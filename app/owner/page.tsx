@@ -1,25 +1,16 @@
 "use client";
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
+import { CelluleAbonnement, PaiementsClientModal, type AbonnementInfo } from '../components/abonnement-ui'
 import {
   getAgentVendeurs,
   creerAgentVendeur,
   basculerAgentVendeurActif,
-  ajouterUtilisateurAgentVendeur,
-  supprimerUtilisateurAgentVendeur,
   getClientsOwner,
+  getPaiementsClientOwner,
   rattacherClient,
   basculerAccesClientOwner
 } from '../actions-owner'
-
-type UtilisateurRow = {
-  id: string
-  email: string | null
-  telephone: string | null
-  nom: string | null
-  role: string
-  connecte: boolean
-}
 
 type AgentVendeurRow = {
   id: string
@@ -30,7 +21,6 @@ type AgentVendeurRow = {
   actif: boolean
   createdAt: Date
   nombreClients: number
-  utilisateurs: UtilisateurRow[]
 }
 
 type ClientOwnerRow = {
@@ -38,17 +28,21 @@ type ClientOwnerRow = {
   name: string
   email: string | null
   telephone: string | null
-  numeroPolice: string | null
   accesActif: boolean
   agentvendeurId: string | null
   agentvendeurNom: string | null
   agentvendeurCode: string | null
+  abonnement: AbonnementInfo
+  // Paiements confirmés dont la période payée est encore en cours (0 pour un essai ou un abonnement expiré)
+  montantEnCours: number
+  // Paiements confirmés faits sur la période choisie (toutes dates si aucune date) et leur nombre
+  montantPaye: number
+  nombrePaiements: number
 }
 
 type ResultatAction = { success: true } | { success: false; message: string }
 
 const formAgentVendeurVide = { nom: '', email: '', telephone: '', adminNom: '' }
-const formUtilisateurVide = { email: '', telephone: '', nom: '', role: 'LECTEUR' }
 
 const page = () => {
   const [onglet, setOnglet] = useState<'agentvendeurs' | 'clients'>('agentvendeurs')
@@ -60,23 +54,44 @@ const page = () => {
   const [enCours, setEnCours] = useState(false)
 
   const [formAgentVendeur, setFormAgentVendeur] = useState(formAgentVendeurVide)
-  const [agentvendeurOuvertId, setAgentVendeurOuvertId] = useState<string | null>(null)
-  const [formUtilisateur, setFormUtilisateur] = useState(formUtilisateurVide)
   const [recherche, setRecherche] = useState('')
+  // Agents dont la liste de clients est repliée (true = repliée)
+  const [clientsReplies, setClientsReplies] = useState<Record<string, boolean>>({})
+
+  // Filtre par dates des paiements (vide = toutes les dates)
+  const [dateDebut, setDateDebut] = useState('')
+  const [dateFin, setDateFin] = useState('')
+  const derniereRequete = useRef(0)
+  // Fenêtre « Paiements » d'un client
+  const [clientPaiements, setClientPaiements] = useState<ClientOwnerRow | null>(null)
+
+  const datesInvalides = !!dateDebut && !!dateFin && dateDebut > dateFin
+  const filtreDatesActif = !!dateDebut || !!dateFin
 
   const charger = useCallback(async () => {
+    // Dates incohérentes : on garde l'affichage actuel et on avertit sous les champs
+    if (dateDebut && dateFin && dateDebut > dateFin) {
+      setLoading(false)
+      return
+    }
+    // Si l'utilisateur change encore les dates avant la réponse, l'ancienne réponse est ignorée
+    const numero = ++derniereRequete.current
     try {
-      const [listeAgentVendeurs, listeClients] = await Promise.all([getAgentVendeurs(), getClientsOwner()])
+      const [listeAgentVendeurs, listeClients] = await Promise.all([
+        getAgentVendeurs(),
+        getClientsOwner(dateDebut || undefined, dateFin || undefined)
+      ])
+      if (numero !== derniereRequete.current) return
       setAgentVendeurs(listeAgentVendeurs as AgentVendeurRow[])
       setClients(listeClients as ClientOwnerRow[])
       setErreurChargement(false)
     } catch (error) {
       console.error(error)
-      setErreurChargement(true)
+      if (numero === derniereRequete.current) setErreurChargement(true)
     } finally {
-      setLoading(false)
+      if (numero === derniereRequete.current) setLoading(false)
     }
-  }, [])
+  }, [dateDebut, dateFin])
 
   useEffect(() => {
     charger()
@@ -108,25 +123,12 @@ const page = () => {
     if (ok) setFormAgentVendeur(formAgentVendeurVide)
   }
 
-  const ajouterUtilisateur = async (agentvendeurId: string) => {
-    const ok = await lancer(() => ajouterUtilisateurAgentVendeur(agentvendeurId, formUtilisateur))
-    if (ok) {
-      setFormUtilisateur(formUtilisateurVide)
-      setAgentVendeurOuvertId(null)
-    }
-  }
-
   const basculerAgentVendeur = async (a: AgentVendeurRow) => {
     const question = a.actif
       ? `Suspendre ${a.nom} ? Ses utilisateurs et tous ses clients perdront l'accès.`
       : `Réactiver ${a.nom} ?`
     if (!confirm(question)) return
     await lancer(() => basculerAgentVendeurActif(a.id, !a.actif))
-  }
-
-  const retirerUtilisateur = async (u: UtilisateurRow) => {
-    if (!confirm(`Retirer ${u.email ?? u.telephone} ?`)) return
-    await lancer(() => supprimerUtilisateurAgentVendeur(u.id))
   }
 
   const changerAgentVendeurClient = async (client: ClientOwnerRow, agentvendeurId: string) => {
@@ -138,10 +140,13 @@ const page = () => {
     await lancer(() => basculerAccesClientOwner(client.id, !client.accesActif))
   }
 
+  const basculerRepli = (agentvendeurId: string) =>
+    setClientsReplies((prev) => ({ ...prev, [agentvendeurId]: !prev[agentvendeurId] }))
+
   const clientsFiltres = clients.filter((c) => {
     const texte = recherche.trim().toLowerCase()
     if (!texte) return true
-    return [c.name, c.email, c.telephone, c.numeroPolice, c.agentvendeurNom]
+    return [c.name, c.email, c.telephone, c.agentvendeurNom]
       .filter(Boolean)
       .some((valeur) => (valeur as string).toLowerCase().includes(texte))
   })
@@ -174,24 +179,87 @@ const page = () => {
     )
   }
 
+  // Chiffres du tableau de bord, sur tous les clients de tous les agents vendeurs
+  const accesActifs = clients.filter((c) => c.accesActif).length
+  // Sans dates : montant des abonnements payés encore en cours (période payée) ; avec dates : paiements confirmés de la période
+  const abonnementsPayes = clients.filter((c) => c.montantEnCours > 0)
+  const nombrePaiements = clients.reduce((total, c) => total + c.nombrePaiements, 0)
+  const totalAbonnements = filtreDatesActif
+    ? clients.reduce((total, c) => total + c.montantPaye, 0)
+    : clients.reduce((total, c) => total + c.montantEnCours, 0)
+
   return (
     <Wrapper>
       <div className='space-y-4 font-bold'>
 
         <h1 className='text-lg font-bold text-red-500'>ADMINISTRATION DE L&apos;APPLICATION</h1>
 
-        <div className='grid md:grid-cols-3 gap-3'>
+        {/* FILTRE PAR DATES : période des paiements d'abonnement comptés dans le total */}
+        <div className='border-2 border-base-200 rounded-3xl p-3'>
+          <div className='flex flex-wrap items-end gap-3'>
+            <label className='flex flex-col gap-1'>
+              <span className='text-xs uppercase text-gray-700'>Paiements du</span>
+              <input
+                type='date'
+                className='input input-bordered input-sm font-bold'
+                value={dateDebut}
+                onChange={(e) => setDateDebut(e.target.value)}
+              />
+            </label>
+            <label className='flex flex-col gap-1'>
+              <span className='text-xs uppercase text-gray-700'>Au</span>
+              <input
+                type='date'
+                className='input input-bordered input-sm font-bold'
+                value={dateFin}
+                onChange={(e) => setDateFin(e.target.value)}
+              />
+            </label>
+            {filtreDatesActif && (
+              <button
+                type='button'
+                className='btn btn-sm btn-ghost font-bold'
+                onClick={() => { setDateDebut(''); setDateFin('') }}
+              >
+                TOUTES LES DATES
+              </button>
+            )}
+          </div>
+          {datesInvalides && (
+            <p className='mt-2 text-xs text-error normal-case'>La date de début doit être avant la date de fin.</p>
+          )}
+        </div>
+
+        {/* TABLEAU DE BORD */}
+        <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
-            <p className='text-xs uppercase text-gray-700 font-bold'>AgentVendeurs</p>
+            <p className='text-xs uppercase text-gray-700 font-bold'>Agents vendeurs</p>
             <p className='text-2xl font-black text-red-500'>{agentvendeurs.length}</p>
           </div>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>Clients</p>
             <p className='text-2xl font-black text-success'>{clients.length}</p>
+            {clientsSansAgentVendeur > 0 && (
+              <p className='text-xs text-blue-600 normal-case'>dont {clientsSansAgentVendeur} sans agent vendeur</p>
+            )}
           </div>
           <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
-            <p className='text-xs uppercase text-gray-700 font-bold'>Clients sans agentvendeur</p>
-            <p className='text-2xl font-black text-blue-600'>{clientsSansAgentVendeur}</p>
+            <p className='text-xs uppercase text-gray-700 font-bold'>Accès actifs</p>
+            <p className='text-2xl font-black text-success'>{accesActifs}</p>
+          </div>
+          <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
+            <p className='text-xs uppercase text-gray-700 font-bold'>
+              {filtreDatesActif ? 'Paiements sur la période' : 'Abonnements actifs'}
+            </p>
+            <p className='text-2xl font-black text-success tabular-nums'>
+              {totalAbonnements.toLocaleString('fr-FR')}{' '}
+              <span className='text-sm font-bold text-gray-600'>FBU</span>
+            </p>
+            <p className='text-xs text-gray-600 normal-case'>
+              {filtreDatesActif
+                ? `${nombrePaiements} paiement${nombrePaiements > 1 ? 's' : ''} confirmé${nombrePaiements > 1 ? 's' : ''}`
+                : `${abonnementsPayes.length} abonnement${abonnementsPayes.length > 1 ? 's' : ''} payé${abonnementsPayes.length > 1 ? 's' : ''} en cours`}
+            </p>
           </div>
         </div>
 
@@ -200,13 +268,13 @@ const page = () => {
             className={`tab font-bold ${onglet === 'agentvendeurs' ? 'tab-active' : ''}`}
             onClick={() => setOnglet('agentvendeurs')}
           >
-            AGENTVENDEURS
+            AGENTS VENDEURS
           </button>
           <button
             className={`tab font-bold ${onglet === 'clients' ? 'tab-active' : ''}`}
             onClick={() => setOnglet('clients')}
           >
-            CLIENTS
+            TOUS LES CLIENTS
           </button>
         </div>
 
@@ -216,17 +284,17 @@ const page = () => {
           </div>
         )}
 
-        {/* ONGLET AGENTVENDEURS */}
+        {/* ONGLET AGENTS VENDEURS : chaque agent avec ses clients */}
         {onglet === 'agentvendeurs' && (
           <div className='space-y-4'>
 
             <div className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
-              <p className='text-sm uppercase text-gray-700 font-bold'>Nouvel agentvendeur</p>
+              <p className='text-sm uppercase text-gray-700 font-bold'>Nouvel agent vendeur</p>
               <div className='grid md:grid-cols-2 gap-3'>
                 <input
                   type='text'
                   className='input input-bordered font-bold placeholder:font-bold'
-                  placeholder="Nom de l'agentvendeur *"
+                  placeholder="Nom de l'agent vendeur *"
                   value={formAgentVendeur.nom}
                   onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, nom: e.target.value })}
                 />
@@ -256,124 +324,104 @@ const page = () => {
                 Renseignez au moins l&apos;email ou le téléphone : l&apos;administrateur s&apos;en servira pour se connecter.
               </p>
               <button className='btn btn-sm btn-primary font-bold' disabled={enCours} onClick={creer}>
-                {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'CRÉER L\'AGENTVENDEUR'}
+                {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'CRÉER L\'AGENT VENDEUR'}
               </button>
             </div>
 
             {agentvendeurs.length === 0 && (
-              <p className='text-sm text-gray-600 normal-case font-bold'>Aucun agentvendeur pour le moment.</p>
+              <p className='text-sm text-gray-600 normal-case font-bold'>Aucun agent vendeur pour le moment.</p>
             )}
 
-            {agentvendeurs.map((a) => (
-              <div key={a.id} className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
-                <div>
-                  <p className='text-lg font-black text-success'>{a.nom}</p>
-                  {/* Même ligne : code + clients à gauche, Actif + SUSPENDRE à droite */}
-                  <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <p className='text-xs text-red-500 font-bold'>
-                      Code {a.code} · {a.nombreClients} client{a.nombreClients > 1 ? 's' : ''}
-                    </p>
-                    <div className='flex items-center gap-2'>
-                      <span className={`badge font-bold ${a.actif ? 'badge-success' : 'badge-error'}`}>
-                        {a.actif ? 'Actif' : 'Suspendu'}
-                      </span>
-                      <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerAgentVendeur(a)}>
-                        {a.actif ? 'SUSPENDRE' : 'RÉACTIVER'}
-                      </button>
+            {agentvendeurs.map((a) => {
+              const clientsDeLAgent = clients.filter((c) => c.agentvendeurId === a.id)
+              const replie = !!clientsReplies[a.id]
+              return (
+                <div key={a.id} className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
+                  <div>
+                    <p className='text-lg font-black text-success'>{a.nom}</p>
+                    {/* Même ligne : code + clients à gauche, Actif + SUSPENDRE à droite */}
+                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                      <p className='text-xs text-red-500 font-bold'>
+                        Code {a.code} · {a.nombreClients} client{a.nombreClients > 1 ? 's' : ''}
+                      </p>
+                      <div className='flex items-center gap-2'>
+                        <span className={`badge font-bold ${a.actif ? 'badge-success' : 'badge-error'}`}>
+                          {a.actif ? 'Actif' : 'Suspendu'}
+                        </span>
+                        <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerAgentVendeur(a)}>
+                          {a.actif ? 'SUSPENDRE' : 'RÉACTIVER'}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className='overflow-x-auto'>
-                  <table className='table table-sm w-full font-bold'>
-                    <thead>
-                      <tr className='text-xs uppercase text-gray-700 font-bold'>
-                        <th className='font-bold'>Utilisateur</th>
-                        <th className='font-bold'>Contact</th>
-                        <th className='font-bold'>Rôle</th>
-                        <th className='font-bold'>Connecté</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {a.utilisateurs.map((u) => (
-                        <tr key={u.id} className='font-bold'>
-                          <td>{u.nom ?? '—'}</td>
-                          <td className='text-xs normal-case'>
-                            {u.email && <div>{u.email}</div>}
-                            {u.telephone && <div>{u.telephone}</div>}
-                          </td>
-                          <td className='text-xs'>{u.role}</td>
-                          <td>{u.connecte ? 'Oui' : 'Pas encore'}</td>
-                          <td>
-                            <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => retirerUtilisateur(u)}>
-                              RETIRER
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {agentvendeurOuvertId !== a.id && (
-                  <button
-                    className='btn btn-xs btn-outline font-bold'
-                    onClick={() => { setAgentVendeurOuvertId(a.id); setFormUtilisateur(formUtilisateurVide) }}
-                  >
-                    + AJOUTER UN UTILISATEUR
-                  </button>
-                )}
-
-                {agentvendeurOuvertId === a.id && (
-                  <div className='border-2 border-base-200 rounded-3xl p-3 space-y-3 font-bold'>
-                    <div className='grid md:grid-cols-2 gap-3'>
-                      <input
-                        type='text'
-                        className='input input-bordered input-sm font-bold placeholder:font-bold'
-                        placeholder='Nom'
-                        value={formUtilisateur.nom}
-                        onChange={(e) => setFormUtilisateur({ ...formUtilisateur, nom: e.target.value })}
-                      />
-                      <select
-                        className='select select-bordered select-sm font-bold'
-                        value={formUtilisateur.role}
-                        onChange={(e) => setFormUtilisateur({ ...formUtilisateur, role: e.target.value })}
-                      >
-                        <option className='font-bold' value='LECTEUR'>LECTEUR (consultation du stock)</option>
-                        <option className='font-bold' value='ADMIN'>ADMIN (gère aussi ses clients)</option>
-                      </select>
-                      <input
-                        type='email'
-                        className='input input-bordered input-sm normal-case font-bold placeholder:font-bold'
-                        placeholder='Email'
-                        value={formUtilisateur.email}
-                        onChange={(e) => setFormUtilisateur({ ...formUtilisateur, email: e.target.value })}
-                      />
-                      <input
-                        type='tel'
-                        className='input input-bordered input-sm font-bold placeholder:font-bold'
-                        placeholder='Téléphone'
-                        value={formUtilisateur.telephone}
-                        onChange={(e) => setFormUtilisateur({ ...formUtilisateur, telephone: e.target.value })}
-                      />
+                  {/* CLIENTS DE CET AGENT VENDEUR */}
+                  <div className='rounded-2xl bg-base-200 p-3 space-y-2'>
+                    <div className='flex items-center justify-between gap-2'>
+                      <p className='text-xs uppercase text-gray-700 font-bold'>
+                        Clients ({clientsDeLAgent.length})
+                      </p>
+                      {clientsDeLAgent.length > 0 && (
+                        <button className='btn btn-xs btn-ghost font-bold' onClick={() => basculerRepli(a.id)}>
+                          {replie ? 'AFFICHER' : 'MASQUER'}
+                        </button>
+                      )}
                     </div>
-                    <div className='flex gap-2'>
-                      <button className='btn btn-xs btn-primary font-bold' disabled={enCours} onClick={() => ajouterUtilisateur(a.id)}>
-                        AJOUTER
-                      </button>
-                      <button className='btn btn-xs btn-ghost font-bold' onClick={() => setAgentVendeurOuvertId(null)}>
-                        ANNULER
-                      </button>
-                    </div>
+
+                    {clientsDeLAgent.length === 0 && (
+                      <p className='text-xs text-gray-600 normal-case font-bold'>Aucun client pour cet agent vendeur.</p>
+                    )}
+
+                    {clientsDeLAgent.length > 0 && !replie && (
+                      <div className='overflow-x-auto'>
+                        <table className='table table-sm w-full font-bold'>
+                          <thead>
+                            <tr className='text-xs uppercase text-gray-700 font-bold'>
+                              <th className='font-bold'>Client</th>
+                              <th className='font-bold'>Contact</th>
+                              <th className='font-bold'>Abonnement</th>
+                              <th className='font-bold'>Accès</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {clientsDeLAgent.map((c) => (
+                              <tr key={c.id} className='font-bold'>
+                                <td>{c.name}</td>
+                                <td className='text-xs normal-case'>
+                                  {c.email && <div>{c.email}</div>}
+                                  {c.telephone && <div>{c.telephone}</div>}
+                                </td>
+                                <td>
+                                  <CelluleAbonnement abonnement={c.abonnement} />
+                                </td>
+                                <td>
+                                  <span className={`badge font-bold ${c.accesActif ? 'badge-success' : 'badge-error'}`}>
+                                    {c.accesActif ? 'Actif' : 'Suspendu'}
+                                  </span>
+                                </td>
+                                <td className='whitespace-nowrap'>
+                                  <button className='btn btn-xs btn-secondary mr-1 font-bold' onClick={() => setClientPaiements(c)}>
+                                    PAIEMENTS
+                                  </button>
+                                  <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerClient(c)}>
+                                    {c.accesActif ? 'SUSPENDRE' : 'RÉACTIVER'}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {/* ONGLET CLIENTS */}
+        {/* ONGLET TOUS LES CLIENTS : rattachement à un agent vendeur */}
         {onglet === 'clients' && (
           <div className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -398,9 +446,10 @@ const page = () => {
                     <tr className='text-xs uppercase text-gray-700 font-bold'>
                       <th className='font-bold'>Client</th>
                       <th className='font-bold'>Contact</th>
-                      <th className='font-bold'>N° police</th>
-                      <th className='font-bold'>AgentVendeur</th>
+                      <th className='font-bold'>Agent vendeur</th>
+                      <th className='font-bold'>Abonnement</th>
                       <th className='font-bold'>Accès</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -411,7 +460,6 @@ const page = () => {
                           {c.email && <div>{c.email}</div>}
                           {c.telephone && <div>{c.telephone}</div>}
                         </td>
-                        <td className='text-xs'>{c.numeroPolice ?? '—'}</td>
                         <td>
                           <select
                             className='select select-bordered select-sm font-bold'
@@ -425,12 +473,20 @@ const page = () => {
                             ))}
                           </select>
                         </td>
+                        <td>
+                          <CelluleAbonnement abonnement={c.abonnement} />
+                        </td>
                         <td className='whitespace-nowrap'>
                           <span className={`badge mr-2 font-bold ${c.accesActif ? 'badge-success' : 'badge-error'}`}>
                             {c.accesActif ? 'Actif' : 'Suspendu'}
                           </span>
                           <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerClient(c)}>
                             {c.accesActif ? 'SUSPENDRE' : 'RÉACTIVER'}
+                          </button>
+                        </td>
+                        <td className='whitespace-nowrap'>
+                          <button className='btn btn-xs btn-secondary font-bold' onClick={() => setClientPaiements(c)}>
+                            PAIEMENTS
                           </button>
                         </td>
                       </tr>
@@ -442,6 +498,18 @@ const page = () => {
           </div>
         )}
       </div>
+
+      {/* FENÊTRE : HISTORIQUE DES PAIEMENTS D'UN CLIENT */}
+      {clientPaiements && (
+        <PaiementsClientModal
+          key={clientPaiements.id}
+          clientNom={clientPaiements.name}
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          charger={() => getPaiementsClientOwner(clientPaiements.id, dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setClientPaiements(null)}
+        />
+      )}
     </Wrapper>
   )
 }

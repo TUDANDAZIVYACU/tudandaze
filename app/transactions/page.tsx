@@ -313,9 +313,32 @@ const page = () => {
                     </button>
                 </div>
 
+                {/* Bilan de la période affichée : trois cartes */}
+                <section>
+                    <div className='grid grid-cols-3 gap-3'>
+                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
+                            <p className='text-xs font-normal opacity-70 md:text-sm'>Achats</p>
+                            <p className='text-lg font-bold tabular-nums text-warning md:text-3xl'>{totalAchats.toLocaleString()}</p>
+                        </div>
+                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
+                            <p className='text-xs font-normal opacity-70 md:text-sm'>Ventes</p>
+                            <p className='text-lg font-bold tabular-nums text-success md:text-3xl'>{totalVentes.toLocaleString()}</p>
+                        </div>
+                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
+                            <p className='text-xs font-normal opacity-70 md:text-sm'>Profit</p>
+                            <p className={`text-lg font-bold tabular-nums md:text-3xl ${totalProfit >= 0 ? 'text-success' : 'text-error'}`}>
+                                {totalProfit.toLocaleString()}
+                            </p>
+                        </div>
+                    </div>
+                    <p className='mt-2 text-xs font-normal opacity-60'>
+                        Profit : pour chaque vente, prix de vente moins prix d&apos;achat du dernier approvisionnement.
+                    </p>
+                </section>
+
                 {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
-                <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl border border-base-300 bg-base-100 p-3 md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
-                    <label className='col-span-3 flex flex-col gap-1 md:col-span-1'>
+                <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm lg:grid-cols-[2fr_1fr_1fr_auto] lg:p-4'>
+                    <label className='col-span-3 flex flex-col gap-1 lg:col-span-1'>
                         <span className='text-sm font-normal opacity-70'>Produit</span>
                         <select aria-label="Filtrer par produit"
                             className='select select-bordered w-full'
@@ -354,7 +377,7 @@ const page = () => {
                     <button aria-label="Réinitialiser les filtres"
                         title="Réinitialiser"
                         type='button'
-                        className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 md:mb-0 md:h-12 md:px-3 md:font-semibold'
+                        className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 lg:mb-0 lg:h-12 lg:px-3 lg:font-semibold'
                         onClick={() => {
                             setSelectedProductId("")
                             setDateFrom(todayStr())
@@ -362,31 +385,8 @@ const page = () => {
                         }}
                     >
                         <RotateCcw className='h-5 w-5' />
-                        <span className='hidden md:inline'>Réinitialiser</span>
+                        <span className='hidden lg:inline'>Réinitialiser</span>
                     </button>
-                </section>
-
-                {/* Bilan de la période affichée */}
-                <section>
-                    <div className='grid grid-cols-3 divide-x divide-base-300 rounded-2xl border border-base-300 bg-base-100'>
-                        <div className='p-3 md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Achats</p>
-                            <p className='text-lg font-bold tabular-nums text-warning md:text-3xl'>{totalAchats.toLocaleString()}</p>
-                        </div>
-                        <div className='p-3 md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Ventes</p>
-                            <p className='text-lg font-bold tabular-nums text-success md:text-3xl'>{totalVentes.toLocaleString()}</p>
-                        </div>
-                        <div className='p-3 md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Profit</p>
-                            <p className={`text-lg font-bold tabular-nums md:text-3xl ${totalProfit >= 0 ? 'text-success' : 'text-error'}`}>
-                                {totalProfit.toLocaleString()}
-                            </p>
-                        </div>
-                    </div>
-                    <p className='mt-2 text-xs font-normal opacity-60'>
-                        Profit : pour chaque vente, prix de vente moins prix d&apos;achat du dernier approvisionnement.
-                    </p>
                 </section>
 
                 {/* Opérations, regroupées par jour */}
@@ -406,11 +406,11 @@ const page = () => {
                             <section key={groupe.jour}>
                                 <div className='mb-2 flex items-baseline justify-between gap-3 px-1'>
                                     <h2 className='font-bold first-letter:uppercase'>{dateLongue(groupe.jour)}</h2>
-                                    <p className='text-sm font-normal opacity-60'>
+                                    <span className='badge badge-primary badge-soft font-bold'>
                                         {groupe.liste.length} opération{groupe.liste.length > 1 ? 's' : ''}
-                                    </p>
+                                    </span>
                                 </div>
-                                <div className='divide-y divide-base-300 rounded-2xl border border-base-300 bg-base-100 px-4'>
+                                <div className='divide-y divide-base-300 rounded-2xl bg-base-100 px-4 shadow-sm'>
                                     {groupe.liste.map((tx) => (
                                         <TransactionComponent
                                             key={tx.id}

@@ -54,7 +54,7 @@ const RecentTransactions = ({ email, dateFiltre, donnees, coutsAchat }: {
     if (piloté && donnees === null) {
         return (
             <section
-                className='space-y-4 rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'
+                className='space-y-4 rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'
                 aria-busy='true'
                 aria-label='Chargement des opérations'
             >
@@ -80,13 +80,13 @@ const RecentTransactions = ({ email, dateFiltre, donnees, coutsAchat }: {
     }
 
     return (
-        <section className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'>
+        <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
             <div className='flex items-baseline justify-between gap-3'>
                 <h2 className='text-lg font-bold'>Achats et ventes</h2>
                 {filtered.length > 0 && (
-                    <p className='text-lg font-bold '>
+                    <span className='badge badge-primary badge-soft font-bold'>
                         {filtered.length} opération{filtered.length > 1 ? 's' : ''}
-                    </p>
+                    </span>
                 )}
             </div>
 

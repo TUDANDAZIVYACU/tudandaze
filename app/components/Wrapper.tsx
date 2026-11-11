@@ -7,6 +7,8 @@ type WrapperProps = {
     compact?: boolean
 }
 
+// Contenu centré, limité à 72 rem de large (max-w-6xl) : sur grand écran, il reste au milieu avec des marges égales.
+// Téléphone : barre du haut + barre de navigation fixe en bas (marge basse pour ne pas cacher le contenu).
 const Wrapper = ({ children, compact = false }: WrapperProps) => {
     return (
         <div>
@@ -25,7 +27,9 @@ const Wrapper = ({ children, compact = false }: WrapperProps) => {
                 />
             </div>
 
-            <div className={`px-5 md:px-[10%] ${compact ? 'mt-2' : 'mt-8'} mb-10 print:mt-0 print:px-0`}>
+            <div
+                className={`mx-auto w-full max-w-6xl px-5 md:px-8 ${compact ? 'mt-2' : 'mt-8'} mb-28 md:mb-10 print:mx-0 print:mb-0 print:mt-0 print:max-w-none print:px-0`}
+            >
                 {children}
             </div>
         </div>

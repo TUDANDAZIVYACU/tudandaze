@@ -80,7 +80,7 @@ const ProductOverview = ({ email, dateFiltre, donnees, margeTotale, onTotalDepen
     if (!stats) {
         return (
             <section
-                className='space-y-4 rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'
+                className='space-y-4 rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'
                 aria-busy='true'
                 aria-label='Chargement du récapitulatif'
             >
@@ -98,7 +98,7 @@ const ProductOverview = ({ email, dateFiltre, donnees, margeTotale, onTotalDepen
     const enJournee = !!dateFiltre
 
     return (
-        <section className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6'>
+        <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
             <h2 className='text-lg font-bold'>
                 {enJournee ? 'Récapitulatif de la journée' : 'Récapitulatif de toutes les dates'}
             </h2>
@@ -129,7 +129,7 @@ const ProductOverview = ({ email, dateFiltre, donnees, margeTotale, onTotalDepen
             </div>
 
             {/* Le chiffre à retenir : l'argent à verser */}
-            <div className='mt-1 border-t-2 border-dashed border-base-content/30 pt-4'>
+            <div className='mt-3 rounded-2xl bg-primary/10 p-4'>
                 <p className='font-semibold'>{enJournee ? 'Versement du jour' : 'Versement total'}</p>
                 <p className='text-xs font-normal font-bold '>
                     Ventes − Dépenses − Dettes accordées + Paiements de dettes
