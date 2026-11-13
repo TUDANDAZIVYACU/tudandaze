@@ -264,11 +264,10 @@ const page = () => {
 
     return (
         <Wrapper>
-            {/* Deux colonnes (produits / panier) à partir de xl : avec la barre latérale, md et lg sont trop étroits */}
-            <div className='grid gap-4 pb-28 xl:grid-cols-12 xl:pb-0 print:hidden'>
+            <div className='grid gap-4 pb-28 md:grid-cols-12 md:pb-0 print:hidden'>
 
                 {/* ───────── GAUCHE : recherche et produits ───────── */}
-                <section className='xl:col-span-5'>
+                <section className='md:col-span-5'>
                     <h1 className='text-2xl font-bold leading-tight md:text-3xl'>Vente</h1>
                     <p className='mb-3 text-sm font-normal opacity-60'>
                         <span className='hidden md:inline'>Entrée ajoute le premier résultat. </span>
@@ -303,7 +302,7 @@ const page = () => {
                     <div className='mt-3'>
                         {resultatsAffiches.length > 0 ? (
                             <>
-                                <div className='grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2'>
+                                <div className='grid grid-cols-2 gap-2 md:grid-cols-1 xl:grid-cols-2'>
                                     {resultatsAffiches.map((product) => {
                                         const stock = product.quantity ?? 0
                                         const prix = product.prixVente || product.price || 0
@@ -346,7 +345,7 @@ const page = () => {
                 </section>
 
                 {/* ───────── DROITE : panier et paiement ───────── */}
-                <section className='xl:col-span-7'>
+                <section className='md:col-span-7'>
                     <div className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
 
                         {derniereFacture && (
@@ -616,12 +615,10 @@ const page = () => {
                 </section>
             </div>
 
-            {/* Barre fixe en bas : total + accès rapide au paiement.
-                Téléphone : posée juste au-dessus de la barre de navigation. md et lg : au bas de l'écran, à droite de la barre latérale.
-                Cachée à partir de xl, où le panier est visible à côté des produits. */}
+            {/* Barre fixe sur téléphone : total + accès rapide au paiement, posée juste au-dessus de la barre de navigation */}
             {order.length > 0 && (
                 <div
-                    className='fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom,0px))] z-40 flex items-center gap-3 border-t border-base-300 bg-base-100 px-4 py-3 shadow-lg md:bottom-0 md:left-64 md:pl-8 xl:hidden print:hidden'
+                    className='fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom,0px))] z-40 flex items-center gap-3 border-t border-base-300 bg-base-100 px-4 py-3 shadow-lg md:hidden print:hidden'
                 >
                     <div className='min-w-0 flex-1'>
                         <p className='text-xs font-normal opacity-60'>{nombreArticles} article{nombreArticles > 1 ? 's' : ''}</p>

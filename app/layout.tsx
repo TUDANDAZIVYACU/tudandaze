@@ -18,7 +18,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="fr" data-theme="ciel">
         <body
-          className={`${GeistSans.variable} ${GeistMono.variable} min-h-screen bg-base-200 text-base-content antialiased`}
+          className={`${GeistSans.variable} ${GeistMono.variable} min-h-screen bg-base-300 text-base-content antialiased`}
         >
           {children}
         </body>

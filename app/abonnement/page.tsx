@@ -40,14 +40,14 @@ export default async function AbonnementPage() {
 
   return (
     <Wrapper>
-      <div className="max-w-xl mx-auto space-y-6">
+      <div className="max-w-xl mx-auto space-y-4">
         <div>
-          <h1 className="text-xl font-bold">Abonnement</h1>
-          <p className={enCours ? "text-success" : "text-error"}>{etat}</p>
+          <h1 className="text-2xl font-bold leading-tight md:text-3xl">Abonnement</h1>
+          <p className={`text-sm ${enCours ? "text-success" : "text-error"}`}>{etat}</p>
         </div>
 
-        <section className="card bg-base-100 border border-base-300 p-4">
-          <h2 className="font-bold">Payer ou prolonger</h2>
+        <section className="rounded-2xl bg-base-100 p-5 shadow-sm md:p-6">
+          <h2 className="text-lg font-bold">Payer ou prolonger</h2>
           {enCours && (
             <p className="text-sm opacity-70 normal-case font-normal">
               Vous pouvez payer à l&apos;avance : les mois payés s&apos;ajoutent à la fin de votre abonnement actuel.
@@ -57,8 +57,8 @@ export default async function AbonnementPage() {
         </section>
 
         {paiements.length > 0 && (
-          <section>
-            <h2 className="font-bold mb-2">Derniers paiements</h2>
+          <section className="rounded-2xl bg-base-100 p-5 shadow-sm md:p-6">
+            <h2 className="text-lg font-bold mb-2">Derniers paiements</h2>
             <div className="overflow-x-auto">
               <table className="table table-sm">
                 <thead>

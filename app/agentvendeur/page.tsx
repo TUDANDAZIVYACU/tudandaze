@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import Wrapper from '../components/Wrapper'
 import { CelluleAbonnement, PaiementsClientModal, type AbonnementInfo } from '../components/abonnement-ui'
 import {
@@ -14,6 +15,7 @@ type MonAgentVendeur = {
   nom: string
   code: string
   role: string
+  superAgent: boolean
 }
 
 type ClientRow = {
@@ -131,7 +133,7 @@ const page = () => {
   if (erreurChargement || !agentvendeur) {
     return (
       <Wrapper>
-        <div className='border-2 border-base-200 rounded-3xl p-6 text-center font-bold'>
+        <div className='rounded-2xl bg-base-100 shadow-sm p-6 text-center font-bold'>
           <p>Impossible de charger votre espace agentvendeur.</p>
           <p className='text-sm text-gray-500 normal-case mt-2'>
             Vérifiez votre connexion, ou contactez l&apos;administrateur si le problème persiste.
@@ -158,12 +160,13 @@ const page = () => {
     <Wrapper>
       <div className='space-y-4 font-bold'>
 
-        <h1 className='text-lg font-bold text-error'>
-          ESPACE AGENTVENDEUR — {agentvendeur.nom}
+        <h1 className='flex flex-wrap items-center gap-2 text-lg font-bold text-error'>
+          ESPACE {agentvendeur.superAgent ? 'SUPER ' : ''}AGENTVENDEUR — {agentvendeur.nom}
+          {agentvendeur.superAgent && <span className='badge badge-primary font-bold'>Stock et IN/OUT</span>}
         </h1>
 
         {/* FILTRE PAR DATES : période des paiements d'abonnement comptés dans le total */}
-        <div className='border-2 border-base-200 rounded-3xl p-3'>
+        <div className='rounded-2xl bg-base-100 shadow-sm p-3'>
           <div className='flex flex-wrap items-end gap-3'>
             <label className='flex flex-col gap-1'>
               <span className='text-xs uppercase text-gray-600'>Paiements du</span>
@@ -200,18 +203,18 @@ const page = () => {
 
         {/* RÉSUMÉ */}
         <div className='grid md:grid-cols-3 gap-3'>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center'>
             <p className='text-xs uppercase text-gray-600'>Clients</p>
             <p className='text-2xl font-black text-red'>{clients.length}</p>
             {enAttente > 0 && (
               <p className='text-xs text-gray-600 normal-case'>dont {enAttente} en attente d&apos;inscription</p>
             )}
           </div>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center'>
             <p className='text-xs uppercase text-gray-600'>Accès actifs</p>
             <p className='text-2xl font-black text-success'>{accesActifs}</p>
           </div>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center'>
             <p className='text-xs uppercase text-gray-600'>
               {filtreDatesActif ? 'Paiements sur la période' : 'Abonnements actifs'}
             </p>
@@ -229,7 +232,7 @@ const page = () => {
 
         {/* CODE AGENTVENDEUR : à donner aux clients, qui s'enregistrent eux-mêmes */}
         {estAdmin && (
-          <div className='border-2 border-base-200 rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3'>
             <div>
               <p className='text-xs uppercase text-gray-600'>Votre code agentvendeur</p>
               <p className='text-2xl font-black text-success tracking-widest'>{agentvendeur.code}</p>
@@ -244,7 +247,7 @@ const page = () => {
         )}
 
         {/* MES CLIENTS */}
-        <div className='border-2 border-base-200 rounded-3xl p-4'>
+        <div className='rounded-2xl bg-base-100 shadow-sm p-4'>
           <div className='flex flex-wrap items-center justify-between gap-2 mb-3'>
             <p className='text-sm uppercase text-gray-600'>Mes clients</p>
             <input
@@ -300,6 +303,16 @@ const page = () => {
                         )}
                       </td>
                       <td className='whitespace-nowrap'>
+                        {agentvendeur.superAgent && (
+                          <>
+                            <Link href={`/agentvendeur/variation/${c.id}`} className='btn btn-xs btn-secondary mr-1'>
+                              IN/OUT
+                            </Link>
+                            <Link href={`/agentvendeur/stock/${c.id}`} className='btn btn-xs btn-primary mr-1'>
+                              STOCK
+                            </Link>
+                          </>
+                        )}
                         <button className='btn btn-xs btn-secondary mr-1' onClick={() => setClientPaiements(c)}>
                           PAIEMENTS
                         </button>

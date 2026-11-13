@@ -56,6 +56,7 @@ export async function getAgentVendeurs() {
         email: a.email,
         telephone: a.telephone,
         actif: a.actif,
+        superAgent: a.superAgent,
         createdAt: a.createdAt,
         nombreClients: a._count.clients
     }))
@@ -67,6 +68,7 @@ export async function creerAgentVendeur(data: {
     email?: string
     telephone?: string
     adminNom?: string
+    superAgent?: boolean
 }) {
     return executer(async () => {
         await exigerOwner()
@@ -92,7 +94,8 @@ export async function creerAgentVendeur(data: {
                         code,
                         nom,
                         email: contact.email,
-                        telephone: contact.telephone
+                        telephone: contact.telephone,
+                        superAgent: !!data.superAgent
                     }
                 })
                 await tx.agentvendeurUser.create({
@@ -108,6 +111,17 @@ export async function creerAgentVendeur(data: {
             })
         )
         return { id: agentvendeur.id, code: agentvendeur.code, nom: agentvendeur.nom }
+    })
+}
+
+// Donne ou retire à un agent vendeur le statut de super agent vendeur :
+// accès, pour tous ses clients, au stock à une date donnée et aux entrées/sorties (IN/OUT)
+export async function definirSuperAgent(agentvendeurId: string, superAgent: boolean) {
+    return executer(async () => {
+        await exigerOwner()
+        await withRetry(() =>
+            prisma.agentvendeur.update({ where: { id: agentvendeurId }, data: { superAgent } })
+        )
     })
 }
 

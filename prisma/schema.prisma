@@ -92,6 +92,7 @@ model PaiementAbonnement {
 
 // Agent vendeur (ex-assureur) : créé et géré par les propriétaires de l'application.
 // La table garde son nom en base ("Assureur") pour ne perdre aucune donnée.
+// superAgent : super agent vendeur = accès au stock et aux entrées/sorties (IN/OUT) de ses clients
 model Agentvendeur {
   id           String             @id @default(uuid())
   code         String             @unique
@@ -99,6 +100,7 @@ model Agentvendeur {
   email        String?            @unique
   telephone    String?
   actif        Boolean            @default(true)
+  superAgent   Boolean            @default(false)
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   clients      Businessbi[]

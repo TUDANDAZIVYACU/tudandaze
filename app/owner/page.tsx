@@ -6,6 +6,7 @@ import {
   getAgentVendeurs,
   creerAgentVendeur,
   basculerAgentVendeurActif,
+  definirSuperAgent,
   getClientsOwner,
   getPaiementsClientOwner,
   rattacherClient,
@@ -19,6 +20,7 @@ type AgentVendeurRow = {
   email: string | null
   telephone: string | null
   actif: boolean
+  superAgent: boolean
   createdAt: Date
   nombreClients: number
 }
@@ -42,7 +44,7 @@ type ClientOwnerRow = {
 
 type ResultatAction = { success: true } | { success: false; message: string }
 
-const formAgentVendeurVide = { nom: '', email: '', telephone: '', adminNom: '' }
+const formAgentVendeurVide = { nom: '', email: '', telephone: '', adminNom: '', superAgent: false }
 
 const page = () => {
   const [onglet, setOnglet] = useState<'agentvendeurs' | 'clients'>('agentvendeurs')
@@ -131,6 +133,14 @@ const page = () => {
     await lancer(() => basculerAgentVendeurActif(a.id, !a.actif))
   }
 
+  const basculerSuperAgent = async (a: AgentVendeurRow) => {
+    const question = a.superAgent
+      ? `Retirer à ${a.nom} l'accès au stock et aux IN/OUT de ses clients ?`
+      : `Donner à ${a.nom} l'accès au stock et aux IN/OUT de ses clients (super agent vendeur) ?`
+    if (!confirm(question)) return
+    await lancer(() => definirSuperAgent(a.id, !a.superAgent))
+  }
+
   const changerAgentVendeurClient = async (client: ClientOwnerRow, agentvendeurId: string) => {
     await lancer(() => rattacherClient(client.id, agentvendeurId || null))
   }
@@ -166,7 +176,7 @@ const page = () => {
   if (erreurChargement) {
     return (
       <Wrapper>
-        <div className='border-2 border-base-200 rounded-3xl p-6 text-center font-bold'>
+        <div className='rounded-2xl bg-base-100 shadow-sm p-6 text-center font-bold'>
           <p className='font-bold'>Impossible de charger l&apos;administration.</p>
           <p className='text-sm text-gray-500 normal-case mt-2 font-bold'>
             Vérifiez votre connexion et que votre email figure dans SUPER_ADMIN_EMAILS.
@@ -191,11 +201,11 @@ const page = () => {
   return (
     <Wrapper>
       <div className='space-y-4 font-bold'>
-
+        
         <h1 className='text-lg font-bold text-red-500'>ADMINISTRATION DE L&apos;APPLICATION</h1>
 
         {/* FILTRE PAR DATES : période des paiements d'abonnement comptés dans le total */}
-        <div className='border-2 border-base-200 rounded-3xl p-3'>
+        <div className='rounded-2xl bg-base-100 shadow-sm p-3'>
           <div className='flex flex-wrap items-end gap-3'>
             <label className='flex flex-col gap-1'>
               <span className='text-xs uppercase text-gray-700'>Paiements du</span>
@@ -232,22 +242,22 @@ const page = () => {
 
         {/* TABLEAU DE BORD */}
         <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>Agents vendeurs</p>
             <p className='text-2xl font-black text-red-500'>{agentvendeurs.length}</p>
           </div>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>Clients</p>
             <p className='text-2xl font-black text-success'>{clients.length}</p>
             {clientsSansAgentVendeur > 0 && (
               <p className='text-xs text-blue-600 normal-case'>dont {clientsSansAgentVendeur} sans agent vendeur</p>
             )}
           </div>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>Accès actifs</p>
             <p className='text-2xl font-black text-success'>{accesActifs}</p>
           </div>
-          <div className='border-2 border-base-200 rounded-3xl p-4 text-center font-bold'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 text-center font-bold'>
             <p className='text-xs uppercase text-gray-700 font-bold'>
               {filtreDatesActif ? 'Paiements sur la période' : 'Abonnements actifs'}
             </p>
@@ -288,7 +298,7 @@ const page = () => {
         {onglet === 'agentvendeurs' && (
           <div className='space-y-4'>
 
-            <div className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
+            <div className='rounded-2xl bg-base-100 shadow-sm p-4 space-y-3 font-bold'>
               <p className='text-sm uppercase text-gray-700 font-bold'>Nouvel agent vendeur</p>
               <div className='grid md:grid-cols-2 gap-3'>
                 <input
@@ -323,6 +333,15 @@ const page = () => {
               <p className='text-xs text-gray-700 normal-case font-bold'>
                 Renseignez au moins l&apos;email ou le téléphone : l&apos;administrateur s&apos;en servira pour se connecter.
               </p>
+              <label className='flex items-center gap-2 text-sm normal-case font-bold'>
+                <input
+                  type='checkbox'
+                  className='checkbox checkbox-sm checkbox-primary'
+                  checked={formAgentVendeur.superAgent}
+                  onChange={(e) => setFormAgentVendeur({ ...formAgentVendeur, superAgent: e.target.checked })}
+                />
+                Super agent vendeur : accès au stock et aux IN/OUT de ses clients
+              </label>
               <button className='btn btn-sm btn-primary font-bold' disabled={enCours} onClick={creer}>
                 {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'CRÉER L\'AGENT VENDEUR'}
               </button>
@@ -336,7 +355,7 @@ const page = () => {
               const clientsDeLAgent = clients.filter((c) => c.agentvendeurId === a.id)
               const replie = !!clientsReplies[a.id]
               return (
-                <div key={a.id} className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
+                <div key={a.id} className='rounded-2xl bg-base-100 shadow-sm p-4 space-y-3 font-bold'>
                   <div>
                     <p className='text-lg font-black text-success'>{a.nom}</p>
                     {/* Même ligne : code + clients à gauche, Actif + SUSPENDRE à droite */}
@@ -344,10 +363,14 @@ const page = () => {
                       <p className='text-xs text-red-500 font-bold'>
                         Code {a.code} · {a.nombreClients} client{a.nombreClients > 1 ? 's' : ''}
                       </p>
-                      <div className='flex items-center gap-2'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        {a.superAgent && <span className='badge badge-primary font-bold'>Super agent</span>}
                         <span className={`badge font-bold ${a.actif ? 'badge-success' : 'badge-error'}`}>
                           {a.actif ? 'Actif' : 'Suspendu'}
                         </span>
+                        <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerSuperAgent(a)}>
+                          {a.superAgent ? 'RETIRER SUPER AGENT' : 'DONNER SUPER AGENT'}
+                        </button>
                         <button className='btn btn-xs btn-ghost font-bold' disabled={enCours} onClick={() => basculerAgentVendeur(a)}>
                           {a.actif ? 'SUSPENDRE' : 'RÉACTIVER'}
                         </button>
@@ -423,7 +446,7 @@ const page = () => {
 
         {/* ONGLET TOUS LES CLIENTS : rattachement à un agent vendeur */}
         {onglet === 'clients' && (
-          <div className='border-2 border-base-200 rounded-3xl p-4 space-y-3 font-bold'>
+          <div className='rounded-2xl bg-base-100 shadow-sm p-4 space-y-3 font-bold'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <p className='text-sm uppercase text-gray-700 font-bold'>Tous les clients</p>
               <input

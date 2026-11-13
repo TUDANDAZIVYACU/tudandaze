@@ -334,7 +334,7 @@ const CreerProduitPage = () => {
         <div className='grid gap-4 lg:grid-cols-12'>
 
           {/* GAUCHE : formulaire */}
-          <section className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6 lg:col-span-5'>
+          <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6 lg:col-span-5'>
             <h2 className='text-lg font-bold'>Nouveau produit</h2>
 
             <div className='mt-4 space-y-4'>
@@ -397,7 +397,7 @@ const CreerProduitPage = () => {
               </div>
 
               {/* Totaux du stock initial */}
-              <div className='grid grid-cols-3 divide-x divide-base-300 rounded-2xl border border-base-300'>
+              <div className='grid grid-cols-3 divide-x divide-base-300 rounded-2xl bg-base-200'>
                 <div className='p-3'>
                   <p className='text-xs font-normal opacity-70'>Achat total</p>
                   <p className='font-bold tabular-nums text-warning'>{prixAchatTotal.toLocaleString()}</p>
@@ -464,7 +464,7 @@ const CreerProduitPage = () => {
           </section>
 
           {/* DROITE : produits en stock */}
-          <section className='rounded-3xl border border-base-300 bg-base-100 p-5 md:p-6 lg:col-span-7'>
+          <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6 lg:col-span-7'>
             <div className='flex flex-wrap items-start justify-between gap-3'>
               <div>
                 <h2 className='text-lg font-bold'>Produits en stock</h2>
@@ -483,7 +483,7 @@ const CreerProduitPage = () => {
               </button>
             </div>
 
-            <div className='mt-4 grid grid-cols-2 divide-x divide-base-300 rounded-2xl border border-base-300'>
+            <div className='mt-4 grid grid-cols-2 divide-x divide-base-300 rounded-2xl bg-base-200'>
               <div className='p-3 md:p-4'>
                 <p className='text-xs font-normal opacity-70 md:text-sm'>Valeur du stock</p>
                 <p className='text-lg font-bold tabular-nums text-success md:text-2xl'>{valeurTotaleStock.toLocaleString()}</p>

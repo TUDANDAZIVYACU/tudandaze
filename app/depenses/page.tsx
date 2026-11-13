@@ -305,8 +305,8 @@ const DepensesPage = () => {
         </section>
 
         {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
-        <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm lg:grid-cols-[2fr_1fr_1fr_auto] lg:p-4'>
-          <label className={`${champ} col-span-3 lg:col-span-1`}>
+        <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
+          <label className={`${champ} col-span-3 md:col-span-1`}>
             <span className={libelle}>Catégorie</span>
             <select
               className='select select-bordered w-full'
@@ -344,11 +344,11 @@ const DepensesPage = () => {
             type='button'
             aria-label="Réinitialiser les filtres"
             title="Réinitialiser"
-            className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 lg:mb-0 lg:h-12 lg:px-3 lg:font-semibold'
+            className='mb-3 flex items-center justify-center gap-2 text-primary transition-opacity hover:opacity-70 md:mb-0 md:h-12 md:px-3 md:font-semibold'
             onClick={resetFiltres}
           >
             <RotateCcw className='h-5 w-5' />
-            <span className='hidden lg:inline'>Réinitialiser</span>
+            <span className='hidden md:inline'>Réinitialiser</span>
           </button>
         </section>
 

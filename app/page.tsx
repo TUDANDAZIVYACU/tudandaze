@@ -173,8 +173,8 @@ export default function Home() {
       ) : (
         /* Téléphone : récapitulatif, achats et ventes, puis état du stock.
            Ordinateur : récapitulatif et opérations à gauche, l'état du stock reste à droite. */
-        <div className="grid gap-4 xl:grid-cols-12">
-          <div className="order-1 xl:order-none xl:col-span-7">
+        <div className="grid gap-4 lg:grid-cols-12">
+          <div className="order-1 lg:order-none lg:col-span-7">
             <ProductOverview
               email={email}
               dateFiltre={dateFiltre}
@@ -182,10 +182,10 @@ export default function Home() {
               margeTotale={margeTotale}
             />
           </div>
-          <div className="order-3 xl:order-none xl:col-span-5 xl:row-span-2">
+          <div className="order-3 lg:order-none lg:col-span-5 lg:row-span-2">
             <StockSummaryTable email={email} dateFiltre={dateFiltre} donnees={dashboard?.summary ?? null} />
           </div>
-          <div className="order-2 xl:order-none xl:col-span-7">
+          <div className="order-2 lg:order-none lg:col-span-7">
             <RecentTransactions
               email={email}
               dateFiltre={dateFiltre}

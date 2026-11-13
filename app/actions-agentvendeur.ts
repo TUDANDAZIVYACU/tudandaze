@@ -26,6 +26,22 @@ async function exigerAgentVendeur(ecriture = false) {
     return acces
 }
 
+// Réservé aux super agents vendeurs : accès au stock et aux entrées/sorties (IN/OUT) des clients.
+// Le statut de super agent est un réglage de l'agent vendeur, donné par le super admin (page /owner).
+async function exigerSuperAgent() {
+    const acces = await exigerAgentVendeur()
+    const agentvendeur = await withRetry(() =>
+        prisma.agentvendeur.findUnique({
+            where: { id: acces.agentvendeurId },
+            select: { superAgent: true }
+        })
+    )
+    if (!agentvendeur?.superAgent) {
+        throw new Error("Accès réservé aux super agents vendeurs.")
+    }
+    return acces
+}
+
 // Jour précédent d'une date AAAA-MM-JJ
 function jourPrecedent(date: string) {
     const d = new Date(date + "T00:00:00Z")
@@ -39,7 +55,7 @@ export async function getMonAgentVendeur() {
     const agentvendeur = await withRetry(() =>
         prisma.agentvendeur.findUnique({
             where: { id: acces.agentvendeurId },
-            select: { id: true, nom: true, code: true }
+            select: { id: true, nom: true, code: true, superAgent: true }
         })
     )
     if (!agentvendeur) throw new Error("AgentVendeur introuvable.")
@@ -113,7 +129,7 @@ export async function getPaiementsClient(clientId: string, dateDebut?: string, d
 // Sans date, on prend aujourd'hui (heure du Burundi).
 export async function getStockClientALaDate(businessbiId: string, dateFiltre?: string) {
     return executer(async () => {
-        const acces = await exigerAgentVendeur()
+        const acces = await exigerSuperAgent()
 
         const date = dateFiltre && dateFiltre.trim()
             ? dateFiltre.trim()
@@ -168,7 +184,7 @@ export async function getStockClientALaDate(businessbiId: string, dateFiltre?: s
 // Approvisionnements = liste détaillée des entrées (IN) de la période, avec la photo de la facture si elle existe.
 export async function getVariationStockClient(businessbiId: string, dateDebut: string, dateFin: string) {
     return executer(async () => {
-        const acces = await exigerAgentVendeur()
+        const acces = await exigerSuperAgent()
 
         const debut = (dateDebut || "").trim()
         const fin = (dateFin || "").trim()

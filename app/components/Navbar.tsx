@@ -13,7 +13,7 @@ import ThemeSelector from './ThemeSelector'
 type AccesNavbar = NavbarInfo['acces'] | null
 type Lien = { href: string; label: string; court?: string; icon: LucideIcon }
 
-const APP_NAME = "ASSURANCE.COM"
+const APP_NAME = "TUDANDAZE.COM"
 
 // Dernier état de la barre connu, gardé dans le navigateur pour un affichage immédiat
 const CLE_CACHE = "navbar-cache-v1"
