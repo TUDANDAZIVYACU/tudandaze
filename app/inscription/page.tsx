@@ -45,8 +45,9 @@ const page = () => {
 
   return (
     <Wrapper>
-      <div className='max-w-md mx-auto'>
-        <div className='rounded-2xl bg-base-100 p-5 shadow-sm space-y-4 font-bold'>
+      {/* Formulaire centré au milieu de la page (horizontalement et verticalement) */}
+      <div className='flex min-h-[calc(100vh-11rem)] items-center justify-center'>
+        <div className='w-full max-w-md rounded-2xl bg-base-100 p-5 shadow-sm space-y-4 font-bold'>
           <p className='text-sm text-gray-600 normal-case font-bold'>
             Saisissez le nom de votre activité et le code d&apos;authentification que vous a donné votre agent vendeur.
           </p>
