@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher, clerkClient } from '@clerk/nextjs/
 import { NextResponse, type NextRequest } from 'next/server';
 import { resoudreAcces, type Acces } from '@/lib/acces';
 import { accesAvecCache } from '@/lib/acces-cache';
+import { accesLimiteActif } from '@/lib/acces-limite';
 
 // /api/webhooks : appelé par Lumicash (pas de session Clerk), protégé par LUMICASH_WEBHOOK_SECRET
 const isPublicRoute = createRouteMatcher([
@@ -123,8 +124,9 @@ export default clerkMiddleware(async (auth, request) => {
     }
   } catch (error) {
     console.error('Erreur vérification accès (proxy):', error);
-    // Zones sensibles : en cas d'erreur on bloque.
-    if (isOwnerRoute(request) || isAgentVendeurRoute(request)) {
+    // Zones sensibles : en cas d'erreur on bloque. Pareil partout quand l'accès est limité à une liste d'adresses
+    // (développement) : une panne ne doit pas laisser entrer des comptes non autorisés.
+    if (accesLimiteActif() || isOwnerRoute(request) || isAgentVendeurRoute(request)) {
       return refuser(request, 'erreur');
     }
     // Zone client : en cas de coupure réseau/DB, on laisse passer plutôt que de

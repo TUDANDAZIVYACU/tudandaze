@@ -1,6 +1,7 @@
 import type { User } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { DUREE_ESSAI_JOURS } from '@/lib/plans';
+import { emailAutorise } from '@/lib/acces-limite';
 
 // Mettre à true pour bloquer les clients qui n'ont pas (encore) d'agentvendeur.
 // Par défaut les clients existants (sans agentvendeur) gardent l'accès tant que accesActif est vrai.
@@ -16,7 +17,8 @@ export type Acces =
   | { type: 'inscription' }
   | {
       type: 'refuse';
-      motif: 'non-enregistre' | 'client-suspendu' | 'agentvendeur-suspendu' | 'sans-agentvendeur';
+      // 'acces-limite' : l'application est réservée à quelques adresses pendant le développement (voir lib/acces-limite.ts)
+      motif: 'non-enregistre' | 'client-suspendu' | 'agentvendeur-suspendu' | 'sans-agentvendeur' | 'acces-limite';
     };
 
 // Identifiants VÉRIFIÉS dans Clerk (emails en minuscules, téléphones au format international)
@@ -56,13 +58,19 @@ async function finAbonnement(
 export async function resoudreAcces(user: User): Promise<Acces> {
   const { emails, telephones } = identifiantsVerifies(user);
 
-  // 1. Propriétaires de l'application
+  // 1. Propriétaires de l'application (toujours autorisés, même quand l'accès est limité)
   const proprietaires = (process.env.SUPER_ADMIN_EMAILS ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   if (emails.some((e) => proprietaires.includes(e))) {
     return { type: 'owner' };
+  }
+
+  // 1 bis. Accès limité pendant le développement : seules les adresses de ACCES_LIMITE_EMAILS peuvent entrer.
+  // Variable absente ou vide = tout le monde (voir lib/acces-limite.ts).
+  if (!emailAutorise(emails)) {
+    return { type: 'refuse', motif: 'acces-limite' };
   }
 
   // 2. Recherche par email OU téléphone

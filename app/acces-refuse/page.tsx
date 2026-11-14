@@ -23,6 +23,11 @@ const MESSAGES: Record<string, { titre: string; texte: string }> = {
     texte:
       "L'abonnement de votre entreprise a expiré. Demandez à l'administrateur de votre entreprise de le renouveler.",
   },
+  'acces-limite': {
+    titre: 'Application en cours de développement',
+    texte:
+      "L'accès est pour le moment réservé à quelques utilisateurs, le temps de terminer le développement. Réessayez plus tard.",
+  },
   erreur: {
     titre: 'Vérification impossible',
     texte: 'Une erreur est survenue. Réessayez dans un instant.',
