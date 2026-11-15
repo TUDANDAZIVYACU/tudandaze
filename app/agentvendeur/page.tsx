@@ -3,12 +3,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Wrapper from '../components/Wrapper'
 import { CelluleAbonnement, PaiementsClientModal, type AbonnementInfo } from '../components/abonnement-ui'
+import { PaiementsTousModal, DepensesClientModal } from '../components/suivi-ui'
 import {
   getMonAgentVendeur,
   getClientsAgentVendeur,
   getPaiementsClient,
   basculerAccesClient
 } from '../actions-agentvendeur'
+import { getPaiementsTousClients, getTotauxDepenses, getDepensesClient } from '../actions-suivi'
 
 type MonAgentVendeur = {
   id: string
@@ -49,6 +51,11 @@ const page = () => {
   const derniereRequete = useRef(0)
   // Fenêtre « Paiements » d'un client
   const [clientPaiements, setClientPaiements] = useState<ClientRow | null>(null)
+  // Fenêtre « Paiements de tous les clients »
+  const [toutPaiements, setToutPaiements] = useState(false)
+  // Total des dépenses de chaque client sur la période (clé : id du client) et fenêtre « Dépenses »
+  const [depensesParClient, setDepensesParClient] = useState<Record<string, number>>({})
+  const [clientDepenses, setClientDepenses] = useState<ClientRow | null>(null)
 
   const estAdmin = agentvendeur?.role === 'ADMIN'
   const datesInvalides = !!dateDebut && !!dateFin && dateDebut > dateFin
@@ -63,13 +70,18 @@ const page = () => {
     // Si l'utilisateur change encore les dates avant la réponse, l'ancienne réponse est ignorée
     const numero = ++derniereRequete.current
     try {
-      const [infos, liste] = await Promise.all([
+      const [infos, liste, depenses] = await Promise.all([
         getMonAgentVendeur(),
-        getClientsAgentVendeur(dateDebut || undefined, dateFin || undefined)
+        getClientsAgentVendeur(dateDebut || undefined, dateFin || undefined),
+        // Réservé aux super agents : le serveur refuse les autres, on ignore simplement le refus
+        getTotauxDepenses(dateDebut || undefined, dateFin || undefined).catch(
+          () => ({} as Record<string, number>)
+        )
       ])
       if (numero !== derniereRequete.current) return
       setAgentVendeur(infos)
       setClients(liste as ClientRow[])
+      setDepensesParClient(depenses)
       setErreurChargement(false)
     } catch (error) {
       console.error(error)
@@ -195,6 +207,14 @@ const page = () => {
                 TOUTES LES DATES
               </button>
             )}
+            <button
+              type='button'
+              className='btn btn-sm btn-secondary ml-auto'
+              disabled={datesInvalides}
+              onClick={() => setToutPaiements(true)}
+            >
+              PAIEMENTS DE TOUS LES CLIENTS
+            </button>
           </div>
           {datesInvalides && (
             <p className='mt-2 text-xs text-error normal-case'>La date de début doit être avant la date de fin.</p>
@@ -278,6 +298,9 @@ const page = () => {
                     <th>Contact</th>
                     <th>Abonnement</th>
                     <th>Accès</th>
+                    {agentvendeur.superAgent && (
+                      <th className='text-right'>Dépenses{filtreDatesActif ? ' (période)' : ''}</th>
+                    )}
                     <th></th>
                   </tr>
                 </thead>
@@ -302,6 +325,11 @@ const page = () => {
                           </span>
                         )}
                       </td>
+                      {agentvendeur.superAgent && (
+                        <td className='text-right tabular-nums whitespace-nowrap'>
+                          {(depensesParClient[c.id] ?? 0).toLocaleString('fr-FR')} FBU
+                        </td>
+                      )}
                       <td className='whitespace-nowrap'>
                         {agentvendeur.superAgent && (
                           <>
@@ -312,6 +340,11 @@ const page = () => {
                               STOCK
                             </Link>
                           </>
+                        )}
+                        {agentvendeur.superAgent && (
+                          <button className='btn btn-xs btn-accent mr-1' onClick={() => setClientDepenses(c)}>
+                            DÉPENSES
+                          </button>
                         )}
                         <button className='btn btn-xs btn-secondary mr-1' onClick={() => setClientPaiements(c)}>
                           PAIEMENTS
@@ -340,6 +373,29 @@ const page = () => {
           dateFin={dateFin}
           charger={() => getPaiementsClient(clientPaiements.id, dateDebut || undefined, dateFin || undefined)}
           onClose={() => setClientPaiements(null)}
+        />
+      )}
+
+      {/* FENÊTRE : PAIEMENTS DE TOUS LES CLIENTS */}
+      {toutPaiements && (
+        <PaiementsTousModal
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          afficherAgent={false}
+          charger={() => getPaiementsTousClients(dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setToutPaiements(false)}
+        />
+      )}
+
+      {/* FENÊTRE : DÉPENSES D'UN CLIENT */}
+      {clientDepenses && (
+        <DepensesClientModal
+          key={clientDepenses.id}
+          clientNom={clientDepenses.name}
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          charger={() => getDepensesClient(clientDepenses.id, dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setClientDepenses(null)}
         />
       )}
     </Wrapper>

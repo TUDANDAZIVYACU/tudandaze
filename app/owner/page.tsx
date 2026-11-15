@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { CelluleAbonnement, PaiementsClientModal, type AbonnementInfo } from '../components/abonnement-ui'
+import { PaiementsTousModal, DepensesClientModal } from '../components/suivi-ui'
 import {
   getAgentVendeurs,
   creerAgentVendeur,
@@ -12,6 +13,7 @@ import {
   rattacherClient,
   basculerAccesClientOwner
 } from '../actions-owner'
+import { getPaiementsTousClients, getTotauxDepenses, getDepensesClient } from '../actions-suivi'
 
 type AgentVendeurRow = {
   id: string
@@ -66,6 +68,11 @@ const page = () => {
   const derniereRequete = useRef(0)
   // Fenêtre « Paiements » d'un client
   const [clientPaiements, setClientPaiements] = useState<ClientOwnerRow | null>(null)
+  // Fenêtre « Paiements de tous les clients »
+  const [toutPaiements, setToutPaiements] = useState(false)
+  // Total des dépenses de chaque client sur la période (clé : id du client) et fenêtre « Dépenses »
+  const [depensesParClient, setDepensesParClient] = useState<Record<string, number>>({})
+  const [clientDepenses, setClientDepenses] = useState<ClientOwnerRow | null>(null)
 
   const datesInvalides = !!dateDebut && !!dateFin && dateDebut > dateFin
   const filtreDatesActif = !!dateDebut || !!dateFin
@@ -79,13 +86,19 @@ const page = () => {
     // Si l'utilisateur change encore les dates avant la réponse, l'ancienne réponse est ignorée
     const numero = ++derniereRequete.current
     try {
-      const [listeAgentVendeurs, listeClients] = await Promise.all([
+      const [listeAgentVendeurs, listeClients, depenses] = await Promise.all([
         getAgentVendeurs(),
-        getClientsOwner(dateDebut || undefined, dateFin || undefined)
+        getClientsOwner(dateDebut || undefined, dateFin || undefined),
+        // Un échec sur les dépenses ne doit pas bloquer la page
+        getTotauxDepenses(dateDebut || undefined, dateFin || undefined).catch((error) => {
+          console.error(error)
+          return {} as Record<string, number>
+        })
       ])
       if (numero !== derniereRequete.current) return
       setAgentVendeurs(listeAgentVendeurs as AgentVendeurRow[])
       setClients(listeClients as ClientOwnerRow[])
+      setDepensesParClient(depenses)
       setErreurChargement(false)
     } catch (error) {
       console.error(error)
@@ -234,6 +247,14 @@ const page = () => {
                 TOUTES LES DATES
               </button>
             )}
+            <button
+              type='button'
+              className='btn btn-sm btn-secondary ml-auto font-bold'
+              disabled={datesInvalides}
+              onClick={() => setToutPaiements(true)}
+            >
+              PAIEMENTS DE TOUS LES CLIENTS
+            </button>
           </div>
           {datesInvalides && (
             <p className='mt-2 text-xs text-error normal-case'>La date de début doit être avant la date de fin.</p>
@@ -404,6 +425,7 @@ const page = () => {
                               <th className='font-bold'>Contact</th>
                               <th className='font-bold'>Abonnement</th>
                               <th className='font-bold'>Accès</th>
+                              <th className='font-bold text-right'>Dépenses{filtreDatesActif ? ' (période)' : ''}</th>
                               <th></th>
                             </tr>
                           </thead>
@@ -423,7 +445,13 @@ const page = () => {
                                     {c.accesActif ? 'Actif' : 'Suspendu'}
                                   </span>
                                 </td>
+                                <td className='text-right tabular-nums whitespace-nowrap'>
+                                  {(depensesParClient[c.id] ?? 0).toLocaleString('fr-FR')} FBU
+                                </td>
                                 <td className='whitespace-nowrap'>
+                                  <button className='btn btn-xs btn-accent mr-1 font-bold' onClick={() => setClientDepenses(c)}>
+                                    DÉPENSES
+                                  </button>
                                   <button className='btn btn-xs btn-secondary mr-1 font-bold' onClick={() => setClientPaiements(c)}>
                                     PAIEMENTS
                                   </button>
@@ -472,6 +500,7 @@ const page = () => {
                       <th className='font-bold'>Agent vendeur</th>
                       <th className='font-bold'>Abonnement</th>
                       <th className='font-bold'>Accès</th>
+                      <th className='font-bold text-right'>Dépenses{filtreDatesActif ? ' (période)' : ''}</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -507,7 +536,13 @@ const page = () => {
                             {c.accesActif ? 'SUSPENDRE' : 'RÉACTIVER'}
                           </button>
                         </td>
+                        <td className='text-right tabular-nums whitespace-nowrap'>
+                          {(depensesParClient[c.id] ?? 0).toLocaleString('fr-FR')} FBU
+                        </td>
                         <td className='whitespace-nowrap'>
+                          <button className='btn btn-xs btn-accent mr-1 font-bold' onClick={() => setClientDepenses(c)}>
+                            DÉPENSES
+                          </button>
                           <button className='btn btn-xs btn-secondary font-bold' onClick={() => setClientPaiements(c)}>
                             PAIEMENTS
                           </button>
@@ -531,6 +566,29 @@ const page = () => {
           dateFin={dateFin}
           charger={() => getPaiementsClientOwner(clientPaiements.id, dateDebut || undefined, dateFin || undefined)}
           onClose={() => setClientPaiements(null)}
+        />
+      )}
+
+      {/* FENÊTRE : PAIEMENTS DE TOUS LES CLIENTS */}
+      {toutPaiements && (
+        <PaiementsTousModal
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          afficherAgent={true}
+          charger={() => getPaiementsTousClients(dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setToutPaiements(false)}
+        />
+      )}
+
+      {/* FENÊTRE : DÉPENSES D'UN CLIENT */}
+      {clientDepenses && (
+        <DepensesClientModal
+          key={clientDepenses.id}
+          clientNom={clientDepenses.name}
+          dateDebut={dateDebut}
+          dateFin={dateFin}
+          charger={() => getDepensesClient(clientDepenses.id, dateDebut || undefined, dateFin || undefined)}
+          onClose={() => setClientDepenses(null)}
         />
       )}
     </Wrapper>
