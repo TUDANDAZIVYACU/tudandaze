@@ -41,9 +41,10 @@ export default async function AbonnementPage() {
   return (
     <Wrapper>
       <div className="max-w-xl mx-auto space-y-4">
-        <div>
+        {/* Titre, puis l'état de l'abonnement juste à sa droite (il passe dessous si la place manque) */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-2xl font-bold leading-tight md:text-3xl">Abonnement</h1>
-          <p className={`text-sm ${enCours ? "text-success" : "text-error"}`}>{etat}</p>
+          <p className={`text-sm font-semibold ${enCours ? "text-success" : "text-error"}`}>{etat}</p>
         </div>
 
         <section className="rounded-2xl bg-base-100 p-5 shadow-sm md:p-6">

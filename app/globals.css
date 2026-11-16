@@ -83,9 +83,9 @@ button {
    Pour que les cartes et le menu restent bien visibles, ils reçoivent un fin contour
    (un anneau d'ombre : il ne touche pas aux bordures que les pages définissent elles-mêmes). */
 .bg-base-100.shadow-sm {
-  /* Anneau de 2 px dans une teinte plus foncée que le fond (25 % de la couleur du texte), puis une ombre douce.
-     Pour un contour plus discret : baisser 25 % et 2px ; plus marqué : les monter. */
+  /* Anneau de 1,5 px dans une teinte un peu plus foncée que le fond (18 % de la couleur du texte), puis une ombre légère.
+     Pour un contour plus discret : baisser 18 % et 1.5px ; plus marqué : les monter. */
   box-shadow:
-    0 0 0 2px color-mix(in oklab, var(--color-base-content) 25%, var(--color-base-100)),
-    0 2px 6px 0 rgb(0 0 0 / 0.12);
+    0 0 0 1.5px color-mix(in oklab, var(--color-base-content) 18%, var(--color-base-100)),
+    0 1px 4px 0 rgb(0 0 0 / 0.1);
 }
