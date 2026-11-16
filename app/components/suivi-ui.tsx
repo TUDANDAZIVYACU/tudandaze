@@ -153,7 +153,12 @@ export function PaiementsTousModal({ dateDebut, dateFin, afficherAgent, charger,
             p.montant,
             statutTexte(p.statut)
           ]),
-          pied: `Total confirmé : ${formaterMontant(totalConfirme)} FBU`
+          colonnesGras: [afficherAgent ? 5 : 4],
+          resume: [
+            { libelle: 'Paiements', valeur: donnees.length },
+            { libelle: 'Confirmés (FBU)', valeur: totalConfirme, ton: 'vert' }
+          ],
+          totaux: [{ libelle: 'Total confirmé (FBU)', valeur: totalConfirme, ton: 'vert' }]
         }
       : null
 
@@ -228,12 +233,18 @@ export function DepensesClientModal({ clientNom, dateDebut, dateFin, charger, on
   const tableau: TableauExport | null =
     donnees && donnees.length > 0
       ? {
-          titre: `Dépenses — ${clientNom}`,
+          organisation: clientNom,
+          titre: 'Dépenses',
           sousTitre: periode,
           nomFichier: `depenses-${nomFichierSur(clientNom)}`,
           colonnes: ['Date', 'Description', 'Catégorie', 'Montant (FBU)'],
           lignes: donnees.map((d) => [formaterDate(d.date), d.description, d.categorie, d.montant]),
-          pied: `Total : ${formaterMontant(total)} FBU`
+          colonnesGras: [3],
+          resume: [
+            { libelle: 'Dépenses', valeur: donnees.length },
+            { libelle: 'Total (FBU)', valeur: total, ton: 'rouge' }
+          ],
+          totaux: [{ libelle: 'Total dépenses (FBU)', valeur: total, ton: 'rouge' }]
         }
       : null
 

@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react'
+import { BoutonsExport } from './suivi-ui'
+import { nomFichierSur, type TableauExport } from '@/lib/export-tableau'
 
 export type AbonnementInfo = { etat: 'essai' | 'actif' | 'expire'; plan: string | null; dateFin: Date } | null
 
@@ -15,6 +17,9 @@ export type PaiementRow = {
 type ReponsePaiements = { success: true; paiements: PaiementRow[] } | { success: false; message: string }
 
 export const formatDate = (d: Date | string) => new Date(d).toLocaleDateString('fr-FR')
+
+const statutTexte = (statut: string) =>
+  statut === 'confirme' ? 'Confirmé' : statut === 'rejete' ? 'Rejeté' : 'En attente'
 
 // Colonne « Abonnement » : badge Actif / Essai / Expiré avec la date de fin
 export function CelluleAbonnement({ abonnement }: { abonnement: AbonnementInfo }) {
@@ -77,21 +82,45 @@ export function PaiementsClientModal({
     .filter((p) => p.statut === 'confirme')
     .reduce((total, p) => total + p.montant, 0)
 
+  const periodeTexte = filtreActif
+    ? `Période : ${dateDebut ? `du ${formatDate(dateDebut)}` : 'depuis le début'}` +
+      (dateFin ? ` au ${formatDate(dateFin)}` : ", jusqu'à aujourd'hui")
+    : 'Toutes les dates'
+
+  // Tableau envoyé au PDF / Excel
+  const tableauExport: TableauExport | null =
+    !enCours && !erreur && paiements.length > 0
+      ? {
+          organisation: clientNom,
+          titre: 'Historique des paiements',
+          sousTitre: periodeTexte,
+          nomFichier: `paiements-${nomFichierSur(clientNom)}`,
+          colonnes: ['Date', 'Durée', 'Montant (FBU)', 'Statut'],
+          lignes: paiements.map((p) => [formatDate(p.createdAt), p.duree, p.montant, statutTexte(p.statut)]),
+          colonnesGras: [2],
+          resume: [
+            { libelle: 'Paiements', valeur: paiements.length },
+            { libelle: 'Confirmés (FBU)', valeur: totalConfirme, ton: 'vert' }
+          ],
+          totaux: [{ libelle: 'Total confirmé (FBU)', valeur: totalConfirme, ton: 'vert' }]
+        }
+      : null
+
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' onClick={onClose}>
-      <div className='w-full max-w-lg space-y-3 rounded-3xl bg-base-100 p-5' onClick={(e) => e.stopPropagation()}>
+      <div className='w-full max-w-xl space-y-3 rounded-3xl bg-base-100 p-5' onClick={(e) => e.stopPropagation()}>
         <div className='flex items-start justify-between gap-3'>
           <div className='min-w-0'>
             <p className='text-xs uppercase text-gray-600'>Historique des paiements</p>
             <h2 className='break-words text-lg font-bold'>{clientNom}</h2>
             {filtreActif && (
-              <p className='text-xs text-gray-600 normal-case'>
-                Période : {dateDebut ? `du ${formatDate(dateDebut)}` : 'depuis le début'}
-                {dateFin ? ` au ${formatDate(dateFin)}` : ", jusqu'à aujourd'hui"}
-              </p>
+              <p className='text-xs text-gray-600 normal-case'>{periodeTexte}</p>
             )}
           </div>
-          <button className='btn btn-sm btn-ghost' onClick={onClose}>FERMER</button>
+          <div className='flex shrink-0 flex-wrap items-center justify-end gap-2'>
+            <BoutonsExport tableau={tableauExport} />
+            <button className='btn btn-sm btn-ghost' onClick={onClose}>FERMER</button>
+          </div>
         </div>
 
         {enCours && (
@@ -132,7 +161,7 @@ export function PaiementsClientModal({
                             p.statut === 'confirme' ? 'badge-success' : p.statut === 'rejete' ? 'badge-error' : 'badge-warning'
                           }`}
                         >
-                          {p.statut === 'confirme' ? 'Confirmé' : p.statut === 'rejete' ? 'Rejeté' : 'En attente'}
+                          {statutTexte(p.statut)}
                         </span>
                       </td>
                     </tr>

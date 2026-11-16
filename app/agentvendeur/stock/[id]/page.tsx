@@ -112,7 +112,8 @@ const page = () => {
   const tableauExport: TableauExport | null =
     stock && !chargement
       ? {
-          titre: `État du stock — ${stock.client.name}`,
+          organisation: stock.client.name,
+          titre: 'État du stock',
           sousTitre:
             `Stock au ${new Date(stock.date + 'T00:00:00').toLocaleDateString('fr-FR')} (fin de journée)` +
             (stock.client.numeroPolice ? ` — RC : ${stock.client.numeroPolice}` : ''),
@@ -135,16 +136,18 @@ const page = () => {
               Math.round(a.valeurAchat),
               Math.round(a.prixVente),
               Math.round(a.valeurVente)
-            ]),
-            [
-              'TOTAL',
-              '',
-              stock.totalQuantite,
-              '',
-              Math.round(stock.totalValeurAchat),
-              '',
-              Math.round(stock.totalValeurVente)
-            ]
+            ])
+          ],
+          colonnesGras: [4, 6],
+          resume: [
+            { libelle: 'Articles en stock', valeur: stock.articles.length },
+            { libelle: "Valeur d'achat (FBU)", valeur: Math.round(stock.totalValeurAchat), ton: 'vert' },
+            { libelle: 'Valeur de vente (FBU)', valeur: Math.round(stock.totalValeurVente) }
+          ],
+          totaux: [
+            { libelle: 'Total quantité', valeur: stock.totalQuantite },
+            { libelle: "Total valeur d'achat (FBU)", valeur: Math.round(stock.totalValeurAchat), ton: 'vert' },
+            { libelle: 'Total valeur de vente (FBU)', valeur: Math.round(stock.totalValeurVente) }
           ]
         }
       : null

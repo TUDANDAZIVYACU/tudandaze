@@ -280,7 +280,7 @@ const page = () => {
       <div className='grid md:grid-cols-2 gap-6 font-bold'>
 
         {/* GAUCHE : formulaire d'enregistrement */}
-        <div className='md:-mt-6'>
+        <div>
           <h1 className='text-2xl font-bold mb-2'>Enregistrer un équipement</h1>
           <div className='space-y-3'>
             <div>
@@ -355,7 +355,7 @@ const page = () => {
         </div>
 
         {/* DROITE : liste des équipements */}
-        <div className='md:-mt-6'>
+        <div>
           <div className='border-2 border-base-200 p-4 rounded-3xl mb-2 flex items-center justify-between gap-3'>
             <div>
               <h2 className='text-2xl font-bold'>

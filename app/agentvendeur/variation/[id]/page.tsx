@@ -133,7 +133,8 @@ const page = () => {
   const tableauExport: TableauExport | null =
     data && !chargement
       ? {
-          titre: `Variation de stock (IN/OUT) — ${data.client.name}`,
+          organisation: data.client.name,
+          titre: 'Variation de stock (IN/OUT)',
           sousTitre:
             `Période du ${dateFr(data.dateDebut)} au ${dateFr(data.dateFin)}` +
             (data.client.numeroPolice ? ` — RC : ${data.client.numeroPolice}` : ''),
@@ -162,19 +163,26 @@ const page = () => {
               Math.round(a.valeurDebut),
               Math.round(a.valeurFin),
               Math.round(a.variationValeur)
-            ]),
-            [
-              'TOTAL',
-              '',
-              '',
-              '',
-              '',
-              '',
-              '',
-              Math.round(data.totalValeurDebut),
-              Math.round(data.totalValeurFin),
-              Math.round(data.totalVariationValeur)
-            ]
+            ])
+          ],
+          colonnesGras: [9],
+          resume: [
+            { libelle: 'Valeur initiale (FBU)', valeur: Math.round(data.totalValeurDebut) },
+            { libelle: 'Valeur finale (FBU)', valeur: Math.round(data.totalValeurFin), ton: 'vert' },
+            {
+              libelle: 'Variation (FBU)',
+              valeur: Math.round(data.totalVariationValeur),
+              ton: data.totalVariationValeur < 0 ? 'rouge' : 'vert'
+            }
+          ],
+          totaux: [
+            { libelle: 'Valeur initiale (FBU)', valeur: Math.round(data.totalValeurDebut) },
+            { libelle: 'Valeur finale (FBU)', valeur: Math.round(data.totalValeurFin), ton: 'vert' },
+            {
+              libelle: 'Variation (FBU)',
+              valeur: Math.round(data.totalVariationValeur),
+              ton: data.totalVariationValeur < 0 ? 'rouge' : 'vert'
+            }
           ],
           sections:
             data.approvisionnements.length > 0

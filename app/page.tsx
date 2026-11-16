@@ -119,14 +119,11 @@ export default function Home() {
         }, 0)
     : undefined
 
-  const prenom = user?.firstName
-
   return (
     <Wrapper compact>
-      {/* En-tête : bonjour et journée consultée à gauche, sélecteur de date à droite */}
+      {/* En-tête : journée consultée à gauche, sélecteur de date à droite */}
       <section className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          {prenom && <p className="text-sm text-base-content/60">Bonjour {prenom}</p>}
           <h1 className="text-xl font-bold leading-tight first-letter:uppercase sm:text-2xl md:text-3xl">
             {titre}
           </h1>

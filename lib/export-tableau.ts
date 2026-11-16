@@ -1,5 +1,15 @@
-// Export d'un ou plusieurs tableaux en PDF ou en Excel (.xlsx), utilisable dans toutes les pages (côté navigateur uniquement).
+// Export d'un ou plusieurs tableaux en PDF (style « Historique des approvisionnements et ventes ») ou en Excel (.xlsx).
+// À utiliser côté navigateur uniquement.
 // Les nombres sont passés bruts (number) : formatés en « 1 234 » dans le PDF, gardés numériques dans Excel.
+
+export type Ton = 'vert' | 'rouge' | 'normal'
+
+// Une paire « LIBELLÉ : valeur » (résumé en haut à droite, totaux en bas)
+export type Paire = {
+  libelle: string
+  valeur: string | number
+  ton?: Ton
+}
 
 export type Section = {
   titre?: string
@@ -8,14 +18,28 @@ export type Section = {
 }
 
 export type TableauExport = {
-  titre: string
-  sousTitre?: string
+  organisation?: string // grand titre : nom de l'entreprise / du client
+  titre: string // titre du document
+  sousTitre?: string // période, date... (à gauche, sous le titre)
   nomFichier: string // sans extension
   colonnes: string[]
   lignes: (string | number)[][]
-  pied?: string // ex. « Total : 150 000 FBU », affiché sous le dernier tableau
-  sections?: Section[] // tableaux supplémentaires, affichés à la suite du premier
+  colonnesGras?: number[] // index des colonnes affichées en gras (ex. Total)
+  resume?: Paire[] // en haut à droite
+  totaux?: Paire[] // en bas, sous la ligne dorée
+  sections?: Section[] // tableaux supplémentaires, à la suite du premier
 }
+
+type Couleur = readonly [number, number, number]
+const BRUN: Couleur = [122, 52, 16]
+const VERT: Couleur = [0, 121, 107]
+const ROUGE: Couleur = [244, 98, 98]
+const OR: Couleur = [221, 204, 146]
+const FILET: Couleur = [236, 229, 216]
+const GRIS: Couleur = [150, 130, 115]
+const BLANC: Couleur = [255, 255, 255]
+
+const couleurTon = (ton?: Ton): Couleur => (ton === 'vert' ? VERT : ton === 'rouge' ? ROUGE : BRUN)
 
 // jsPDF ne gère pas les espaces insécables ni le signe moins typographique produits par toLocaleString('fr-FR')
 const nettoyer = (s: string) => s.replace(/[\u202f\u00a0]/g, ' ').replace(/\u2212/g, '-')
@@ -28,117 +52,223 @@ export async function exporterPdf(t: TableauExport) {
   const maxColonnes = Math.max(...tables.map((s) => s.colonnes.length))
 
   const doc = new jsPDF({
-    orientation: maxColonnes > 5 ? 'landscape' : 'portrait',
+    orientation: maxColonnes > 6 ? 'landscape' : 'portrait',
     unit: 'mm',
     format: 'a4'
   })
   const largeurPage = doc.internal.pageSize.getWidth()
   const hauteurPage = doc.internal.pageSize.getHeight()
-  const marge = 12
+  const marge = 14
   const utile = largeurPage - marge * 2
-  const limite = hauteurPage - marge - 6
-  const interligne = 4.2
-  const pad = 1.5
+  const droite = marge + utile
+  const limite = hauteurPage - marge - 4
 
+  const encre = (c: Couleur) => doc.setTextColor(c[0], c[1], c[2])
+  const remplir = (c: Couleur) => doc.setFillColor(c[0], c[1], c[2])
+  const trait = (c: Couleur, epaisseur: number) => {
+    doc.setDrawColor(c[0], c[1], c[2])
+    doc.setLineWidth(epaisseur)
+  }
+
+  // « LIBELLÉ : valeur » : libellé normal, valeur en gras et en couleur
+  const mesurerPaire = (p: Paire) => {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    const l = doc.getTextWidth(nettoyer(p.libelle.toUpperCase()) + ' :') + 1.8
+    doc.setFont('helvetica', 'bold')
+    const v = doc.getTextWidth(texte(p.valeur))
+    return { l, v }
+  }
+  const dessinerPaire = (p: Paire, xDebut: number, ligneY: number) => {
+    const { l } = mesurerPaire(p)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    encre(BRUN)
+    doc.text(nettoyer(p.libelle.toUpperCase()) + ' :', xDebut, ligneY)
+    doc.setFont('helvetica', 'bold')
+    encre(couleurTon(p.ton))
+    doc.text(texte(p.valeur), xDebut + l, ligneY)
+  }
+
+  // ───── En-tête : entreprise, titre, période, résumé à droite ─────
   let y = marge
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(14)
-  doc.text(nettoyer(t.titre), marge, y + 4)
-  y += 9
+  encre(BRUN)
+  if (t.organisation) {
+    doc.setFontSize(20)
+    doc.text(nettoyer(t.organisation), marge, y + 6)
+    y += 11
+    doc.setFontSize(17)
+    doc.text(nettoyer(t.titre), marge, y + 6)
+    y += 11
+  } else {
+    doc.setFontSize(20)
+    doc.text(nettoyer(t.titre), marge, y + 6)
+    y += 11
+  }
+
+  const resume = t.resume ?? []
+  const interligneResume = 5.5
+  resume.forEach((p, i) => {
+    const { l, v } = mesurerPaire(p)
+    dessinerPaire(p, droite - l - v, y + 3 + i * interligneResume)
+  })
   if (t.sousTitre) {
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.text(nettoyer(t.sousTitre), marge, y)
-    y += 6
+    doc.setFontSize(10)
+    encre(BRUN)
+    const largeurSousTitre = resume.length > 0 ? utile * 0.55 : utile
+    const lignesSousTitre = doc.splitTextToSize(nettoyer(t.sousTitre), largeurSousTitre) as string[]
+    const baseY = y + 3 + (resume.length > 1 ? interligneResume : 0)
+    lignesSousTitre.forEach((l, i) => doc.text(l, marge, baseY + i * 5))
+    y = Math.max(y + 3 + resume.length * interligneResume, baseY + lignesSousTitre.length * 5)
+  } else {
+    y += 3 + resume.length * interligneResume
   }
-  y += 2
+  y += 4
 
-  const dessinerEntete = (colonnes: string[], largeurs: number[]) => {
-    const h = interligne + pad * 2
-    doc.setFillColor(225, 225, 225)
-    doc.rect(marge, y, utile, h, 'F')
+  // ───── Tableaux ─────
+  const hauteurEntete = 9
+  const padH = 3
+  const interligne = 4.4
+  const padV = 1.6
+
+  const dessinerEntete = (colonnes: string[], largeurs: number[], adroite: boolean[]) => {
+    remplir(VERT)
+    doc.rect(marge, y, utile, hauteurEntete, 'F')
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
+    doc.setFontSize(9.5)
+    encre(BLANC)
     let x = marge
     colonnes.forEach((titre, i) => {
-      doc.text(nettoyer(titre), x + pad, y + pad + interligne - 1)
+      const ty = y + 6
+      if (adroite[i]) doc.text(nettoyer(titre), x + largeurs[i] - padH, ty, { align: 'right' })
+      else doc.text(nettoyer(titre), x + padH, ty)
       x += largeurs[i]
     })
-    y += h
+    y += hauteurEntete
   }
 
   const dessinerTable = (s: Section) => {
     if (s.titre) {
-      if (y + 20 > limite) {
+      if (y + 25 > limite) {
         doc.addPage()
         y = marge
       }
       y += 4
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(10)
-      doc.text(nettoyer(s.titre), marge, y)
-      y += 4
+      doc.setFontSize(12)
+      encre(BRUN)
+      doc.text(nettoyer(s.titre), marge, y + 4)
+      y += 8
     }
 
-    // Largeur des colonnes proportionnelle à leur contenu
-    const poids = s.colonnes.map((titre, i) => {
-      const max = s.lignes.reduce((m, l) => Math.max(m, texte(l[i]).length), titre.length)
-      return Math.min(Math.max(max, 6), 40)
-    })
-    const somme = poids.reduce((a, b) => a + b, 0)
-    const largeurs = poids.map((p) => (p / somme) * utile)
+    // Une colonne est alignée à droite si elle contient des nombres
+    const adroite = s.colonnes.map((_, i) => s.lignes.some((l) => typeof l[i] === 'number'))
 
-    dessinerEntete(s.colonnes, largeurs)
+    // Largeur minimale de chaque colonne = largeur réelle de son plus long contenu (plafonnée : au-delà, le texte passe à la ligne)
+    const minimales = s.colonnes.map((titre, i) => {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9.5)
+      let max = doc.getTextWidth(nettoyer(titre))
+      doc.setFont('helvetica', t.colonnesGras?.includes(i) ? 'bold' : 'normal')
+      doc.setFontSize(9)
+      for (const l of s.lignes) max = Math.max(max, doc.getTextWidth(texte(l[i])))
+      return Math.min(max, 60) + padH * 2 + 1
+    })
+    const sommeMin = minimales.reduce((a, b) => a + b, 0)
+    // Place restante répartie selon le poids de chaque colonne ; si ça ne tient pas, on réduit proportionnellement
+    const poids = minimales.map((m) => m)
+    const sommePoids = poids.reduce((a, b) => a + b, 0)
+    const largeurs =
+      sommeMin <= utile
+        ? minimales.map((m, i) => m + ((utile - sommeMin) * poids[i]) / sommePoids)
+        : minimales.map((m) => (m / sommeMin) * utile)
+
+    dessinerEntete(s.colonnes, largeurs, adroite)
 
     for (const ligne of s.lignes) {
-      const cellules = ligne.map((v, i) => doc.splitTextToSize(texte(v), largeurs[i] - pad * 2) as string[])
+      doc.setFontSize(9)
+      const cellules = ligne.map((v, i) => {
+        doc.setFont('helvetica', t.colonnesGras?.includes(i) ? 'bold' : 'normal')
+        return doc.splitTextToSize(texte(v), largeurs[i] - padH * 2) as string[]
+      })
       const nombreLignes = Math.max(1, ...cellules.map((c) => c.length))
-      const h = nombreLignes * interligne + pad * 2
+      const h = nombreLignes * interligne + padV * 2
 
       if (y + h > limite) {
         doc.addPage()
         y = marge
-        dessinerEntete(s.colonnes, largeurs)
+        dessinerEntete(s.colonnes, largeurs, adroite)
       }
 
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
+      encre(BRUN)
+      doc.setFontSize(9)
       let x = marge
       cellules.forEach((c, i) => {
-        const adroite = typeof ligne[i] === 'number'
+        doc.setFont('helvetica', t.colonnesGras?.includes(i) ? 'bold' : 'normal')
         c.forEach((morceau, k) => {
-          const ty = y + pad + interligne * (k + 1) - 1
-          if (adroite) doc.text(morceau, x + largeurs[i] - pad, ty, { align: 'right' })
-          else doc.text(morceau, x + pad, ty)
+          const ty = y + padV + interligne * (k + 1) - 1
+          if (adroite[i]) doc.text(morceau, x + largeurs[i] - padH, ty, { align: 'right' })
+          else doc.text(morceau, x + padH, ty)
         })
         x += largeurs[i]
       })
-      doc.setDrawColor(210)
-      doc.line(marge, y + h, marge + utile, y + h)
+      trait(FILET, 0.25)
+      doc.line(marge, y + h, droite, y + h)
       y += h
     }
   }
 
   tables.forEach(dessinerTable)
 
-  if (t.pied) {
-    if (y + 10 > limite) {
+  // ───── Ligne dorée puis totaux en bas, alignés à droite ─────
+  const totaux = t.totaux ?? []
+  if (totaux.length > 0) {
+    if (y + 20 > limite) {
       doc.addPage()
       y = marge
     }
-    y += 6
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.text(nettoyer(t.pied), marge + utile, y, { align: 'right' })
+    y += 4
+    trait(OR, 0.7)
+    doc.line(marge, y, droite, y)
+    y += 8
+
+    const ecart = 10
+    const lignesTotaux: { paire: Paire; l: number; v: number }[][] = [[]]
+    let largeurLigne = 0
+    for (const p of totaux) {
+      const { l, v } = mesurerPaire(p)
+      const w = l + v
+      const courante = lignesTotaux[lignesTotaux.length - 1]
+      if (courante.length > 0 && largeurLigne + ecart + w > utile) {
+        lignesTotaux.push([])
+        largeurLigne = 0
+      }
+      const cible = lignesTotaux[lignesTotaux.length - 1]
+      largeurLigne += (cible.length > 0 ? ecart : 0) + w
+      cible.push({ paire: p, l, v })
+    }
+    for (const ligne of lignesTotaux) {
+      const largeurTotale = ligne.reduce((a, e, i) => a + e.l + e.v + (i > 0 ? ecart : 0), 0)
+      let x = droite - largeurTotale
+      for (const e of ligne) {
+        dessinerPaire(e.paire, x, y)
+        x += e.l + e.v + ecart
+      }
+      y += 6
+    }
   }
 
+  // ───── Pied de page ─────
   const totalPages = doc.getNumberOfPages()
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, marge, hauteurPage - 6)
-    doc.text(`Page ${p}/${totalPages}`, largeurPage - marge, hauteurPage - 6, { align: 'right' })
+    encre(GRIS)
+    doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, marge, hauteurPage - 7)
+    doc.text(`Page ${p}/${totalPages}`, droite, hauteurPage - 7, { align: 'right' })
   }
 
   doc.save(`${t.nomFichier}.pdf`)
@@ -148,17 +278,19 @@ export async function exporterExcel(t: TableauExport) {
   const XLSX = await import('xlsx')
   const sections = t.sections ?? []
 
-  const donnees: (string | number)[][] = [
-    [t.titre],
-    ...(t.sousTitre ? [[t.sousTitre]] : []),
-    [],
-    t.colonnes,
-    ...t.lignes
-  ]
+  const donnees: (string | number)[][] = []
+  if (t.organisation) donnees.push([t.organisation])
+  donnees.push([t.titre])
+  if (t.sousTitre) donnees.push([t.sousTitre])
+  for (const p of t.resume ?? []) donnees.push([p.libelle, p.valeur])
+  donnees.push([], t.colonnes, ...t.lignes)
   for (const s of sections) {
     donnees.push([], ...(s.titre ? [[s.titre]] : []), s.colonnes, ...s.lignes)
   }
-  if (t.pied) donnees.push([], [t.pied])
+  if (t.totaux && t.totaux.length > 0) {
+    donnees.push([])
+    for (const p of t.totaux) donnees.push([p.libelle, p.valeur])
+  }
 
   const feuille = XLSX.utils.aoa_to_sheet(donnees)
 

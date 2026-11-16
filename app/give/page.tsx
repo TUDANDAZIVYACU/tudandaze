@@ -344,9 +344,11 @@ const page = () => {
                     </div>
                 </section>
 
-                {/* ───────── DROITE : panier et paiement ───────── */}
+                {/* ───────── DROITE : panier et paiement ─────────
+                    Sur ordinateur, la carte occupe au moins toute la hauteur de l'écran restante (jusqu'en bas) ;
+                    elle s'allonge si le panier est plus grand. */}
                 <section className='md:col-span-7'>
-                    <div className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
+                    <div className='flex flex-col rounded-2xl bg-base-100 p-5 shadow-sm md:min-h-[calc(100vh_-_9rem)] md:p-6'>
 
                         {derniereFacture && (
                             <div className='mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-success bg-success/10 p-3'>
@@ -609,7 +611,10 @@ const page = () => {
                                 </div>
                             </>
                         ) : (
-                            <EmptyState message='Aucun produit dans le panier' IconComponent='HandHeart' />
+                            /* Panier vide : le message se centre dans la place restante de la carte */
+                            <div className='flex flex-1 items-center justify-center'>
+                                <EmptyState message='Aucun produit dans le panier' IconComponent='HandHeart' />
+                            </div>
                         )}
                     </div>
                 </section>
