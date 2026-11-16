@@ -80,12 +80,24 @@ button {
 }
 
 /* Le fond des pages a la même couleur que le menu du haut (base-100), comme les cartes.
-   Pour que les cartes et le menu restent bien visibles, ils reçoivent un fin contour
-   (un anneau d'ombre : il ne touche pas aux bordures que les pages définissent elles-mêmes). */
+   Pour que les cartes restent bien visibles, toutes les pages partagent le même contour.
+   Pour l'ajuster partout d'un coup : modifier --contour (le pourcentage) et les 1.5px ci-dessous.
+   Pourcentage plus bas / 1px = plus discret ; plus haut / 2px = plus marqué. */
+:root {
+  --contour: color-mix(in oklab, var(--color-base-content) 18%, var(--color-base-100));
+}
+
+/* Cartes et menu du haut : un anneau d'ombre, qui ne touche pas aux bordures définies par les pages */
 .bg-base-100.shadow-sm {
-  /* Anneau de 1,5 px dans une teinte un peu plus foncée que le fond (18 % de la couleur du texte), puis une ombre légère.
-     Pour un contour plus discret : baisser 18 % et 1.5px ; plus marqué : les monter. */
   box-shadow:
-    0 0 0 1.5px color-mix(in oklab, var(--color-base-content) 18%, var(--color-base-100)),
+    0 0 0 1.5px var(--contour),
     0 1px 4px 0 rgb(0 0 0 / 0.1);
+}
+
+/* Cartes à bordure (Équipements, Centralisation, résumés du stock et de IN/OUT, utilisateurs, cadres vides) :
+   même couleur et même épaisseur que l'anneau ci-dessus */
+.border-2.border-base-200,
+.border.border-base-300 {
+  border-color: var(--contour);
+  border-width: 1.5px;
 }

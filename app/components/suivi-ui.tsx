@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import type { PaiementGlobal, DepenseClient } from '../actions-suivi'
 import { exporterPdf, exporterExcel, nomFichierSur, type TableauExport } from '@/lib/export-tableau'
 
@@ -86,15 +87,24 @@ function Fenetre({ titre, sousTitre, actions, onClose, children }: {
 }) {
   return (
     <dialog className='modal modal-open'>
-      <div className='modal-box max-w-4xl font-bold'>
-        <div className='flex items-start justify-between gap-2 mb-3'>
+      <div className='modal-box relative max-w-4xl font-bold'>
+        {/* X de fermeture, dans le coin supérieur droit */}
+        <button
+          type='button'
+          aria-label='Fermer'
+          title='Fermer'
+          className='btn btn-sm btn-circle btn-ghost absolute right-2 top-2'
+          onClick={onClose}
+        >
+          <X className='h-4 w-4' />
+        </button>
+        <div className='mb-3 flex items-start justify-between gap-2 pr-8'>
           <div>
             <p className='text-lg font-black text-success'>{titre}</p>
             <p className='text-xs text-gray-600 normal-case'>{sousTitre}</p>
           </div>
           <div className='flex flex-wrap items-center justify-end gap-2'>
             {actions}
-            <button className='btn btn-sm btn-ghost font-bold' onClick={onClose}>FERMER</button>
           </div>
         </div>
         {children}

@@ -1,6 +1,8 @@
 "use client";
 import { OrderItem, Product, VenteForPrint } from '@/type'
 import { useUser } from '@clerk/nextjs'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { deductStockWithTransaction, readProductsWithRealQuantity, getVenteForPrint } from '../actions'
 import Wrapper from '../components/Wrapper'
@@ -16,20 +18,23 @@ const MAX_RESULTATS = 24
 
 const page = () => {
     const { user } = useUser()
+    const router = useRouter()
     const email = user?.primaryEmailAddress?.emailAddress as string
     const [products, setProducts] = useState<Product[]>([])
     const [order, setOrder] = useState<OrderItem[]>([])
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({})
-    const [montantPaye, setMontantPaye] = useState<number>(0)
-    // Quand "Montant exact" est actif, le montant payé suit toujours le total du panier
-    const [payeExact, setPayeExact] = useState<boolean>(false)
+    // Montant reçu du client (facultatif) : sert seulement à calculer la monnaie à rendre.
+    // Laissé vide = le client paie le montant exact.
+    const [recu, setRecu] = useState<string>("")
     const [clientNom, setClientNom] = useState<string>("")
 
     const [avecFacture, setAvecFacture] = useState<boolean>(false)
     const [tauxTva, setTauxTva] = useState<number>(18)
     const [derniereFacture, setDerniereFacture] = useState<VenteForPrint | null>(null)
     const [enCours, setEnCours] = useState<boolean>(false)
+    // Vente avec facture ET dette : on reste sur la page pour imprimer la facture, avec un bouton vers les dettes
+    const [detteSurFacture, setDetteSurFacture] = useState<boolean>(false)
 
     const searchRef = useRef<HTMLInputElement>(null)
     const resumeRef = useRef<HTMLDivElement>(null)
@@ -159,6 +164,7 @@ const page = () => {
         if (!confirm("Vider tout le panier ?")) return
         setOrder([])
         setQtyDrafts({})
+        setRecu("")
     }
 
     const saisirQuantite = (item: OrderItem, raw: string) => {
@@ -185,20 +191,28 @@ const page = () => {
         })
     }
 
+    // Totaux : même formule que le serveur
     const totalHT = order.reduce((acc, item) => acc + (item.prixVente || 0) * item.quantity, 0)
     const tva = avecFacture ? totalHT * (tauxTva / 100) : 0
     const totalTTC = totalHT + tva
-    const paye = payeExact ? totalTTC : montantPaye
-    const difference = paye - totalTTC // >= 0 : à rendre ; < 0 : dette
-    const enDette = order.length > 0 && difference < 0
     const nombreArticles = order.reduce((acc, item) => acc + item.quantity, 0)
+
+    // Monnaie à rendre, ou dette si le client paie moins que le total
+    const recuNombre = recu.trim() === "" || isNaN(Number(recu)) ? null : Number(recu)
+    const enDette = order.length > 0 && recuNombre !== null && recuNombre < totalTTC
+    const resteDu = enDette ? totalTTC - (recuNombre ?? 0) : 0
+    const aRendre = recuNombre !== null && recuNombre >= totalTTC ? recuNombre - totalTTC : 0
+
+    const allerAuResume = () => {
+        resumeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
 
     const handleSubmit = async () => {
         if (enCours) return
         if (!email) { toast.error("Utilisateur non connecté"); return }
-        if (order.length === 0) { toast.error("Veuillez ajouter des produits."); return }
+        if (order.length === 0) { toast.error("Ajoutez d'abord des produits au panier."); return }
         if (order.some(item => !item.quantity || item.quantity < 1)) {
-            toast.error("Veuillez renseigner une quantité pour chaque produit du panier.")
+            toast.error("Indiquez une quantité pour chaque produit du panier.")
             return
         }
         const depasse = order.find(item => item.quantity > dispoDe(item))
@@ -206,22 +220,30 @@ const page = () => {
             toast.error(`Stock insuffisant pour "${depasse.name}" (disponible : ${dispoDe(depasse)}).`)
             return
         }
+        if (enDette && !clientNom.trim()) {
+            toast.error("Indiquez le nom du client : la différence sera enregistrée comme dette.")
+            allerAuResume()
+            return
+        }
         if (avecFacture && !clientNom.trim()) {
             toast.error("Le nom du client est obligatoire pour une vente avec facture.")
+            allerAuResume()
             return
         }
 
         setEnCours(true)
         try {
+            // Paiement complet : montant payé = total. Montant reçu plus petit : le serveur enregistre la différence en dette.
             const response = await deductStockWithTransaction(
-                order, email, paye, clientNom, avecFacture, tauxTva
+                order, email, enDette ? (recuNombre ?? 0) : totalTTC, clientNom, avecFacture, tauxTva
             )
 
             if (response?.success) {
-                if (response.solde !== undefined && response.solde < 0) {
-                    toast.warn(`Vente enregistrée avec une dette de ${Math.abs(response.solde).toLocaleString()} pour ${clientNom.trim() || "Client"}.`)
+                const avecDette = (response.solde ?? 0) < 0
+                if (avecDette) {
+                    toast.warn(`Vente enregistrée avec une dette de ${Math.abs(response.solde ?? 0).toLocaleString()} pour ${clientNom.trim()}.`)
                 } else {
-                    toast.success(avecFacture ? `Facture ${response.numero} enregistrée avec succès !` : "Vente confirmée avec succès !")
+                    toast.success(avecFacture ? `Facture ${response.numero} enregistrée avec succès !` : "Vente enregistrée avec succès !")
                 }
 
                 if (avecFacture && response.venteId) {
@@ -233,16 +255,22 @@ const page = () => {
 
                 setOrder([])
                 setQtyDrafts({})
-                setMontantPaye(0)
-                setPayeExact(false)
+                setRecu("")
                 setClientNom("")
                 setAvecFacture(false)
                 setTauxTva(18)
                 setSearchQuery("")
 
-                // Informe toute l'application (cette page, observation, transactions, dettes, centralisation, menu d'approvisionnement...)
+                // Informe toute l'application (cette page, observation, historique, centralisation, approvisionnement...)
                 notifierStock()
                 focusRecherche()
+
+                // Vente avec dette : direct vers la page des dettes (avec facture, on reste pour pouvoir l'imprimer)
+                if (avecDette && !avecFacture) {
+                    router.push('/dettes')
+                } else {
+                    setDetteSurFacture(avecDette)
+                }
             } else {
                 toast.error(`${response?.message}`)
             }
@@ -258,10 +286,6 @@ const page = () => {
         window.print()
     }
 
-    const allerAuResume = () => {
-        resumeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-
     return (
         <Wrapper>
             <div className='grid gap-4 pb-28 md:grid-cols-12 md:pb-0 print:hidden'>
@@ -270,8 +294,7 @@ const page = () => {
                 <section className='md:col-span-5'>
                     <h1 className='text-2xl font-bold leading-tight md:text-3xl'>Vente</h1>
                     <p className='mb-3 text-sm font-normal opacity-60'>
-                        <span className='hidden md:inline'>Entrée ajoute le premier résultat. </span>
-                        Un appui sur un produit l&apos;ajoute au panier (chaque appui = +1).
+                        Touchez un produit pour l&apos;ajouter au panier (chaque appui = +1).
                     </p>
 
                     <div className='relative'>
@@ -344,7 +367,7 @@ const page = () => {
                     </div>
                 </section>
 
-                {/* ───────── DROITE : panier et paiement ─────────
+                {/* ───────── DROITE : panier et validation ─────────
                     Sur ordinateur, la carte occupe au moins toute la hauteur de l'écran restante (jusqu'en bas) ;
                     elle s'allonge si le panier est plus grand. */}
                 <section className='md:col-span-7'>
@@ -356,10 +379,15 @@ const page = () => {
                                 <button onClick={handlePrintFacture} className='btn btn-success btn-sm gap-2'>
                                     <Printer className='h-4 w-4' /> Imprimer la facture
                                 </button>
+                                {detteSurFacture && (
+                                    <Link href='/dettes' className='btn btn-warning btn-sm'>
+                                        Voir la dette
+                                    </Link>
+                                )}
                                 <button
                                     type="button"
                                     className='btn btn-ghost btn-xs ml-auto'
-                                    onClick={() => setDerniereFacture(null)}
+                                    onClick={() => { setDerniereFacture(null); setDetteSurFacture(false) }}
                                 >
                                     Fermer
                                 </button>
@@ -455,39 +483,86 @@ const page = () => {
                                     })}
                                 </div>
 
-                                {/* Récapitulatif et paiement */}
+                                {/* Total et validation */}
                                 <div ref={resumeRef} className='mt-4 scroll-mt-4 space-y-4 border-t-2 border-dashed border-base-content/30 pt-4'>
 
-                                    {/* Avec / sans facture */}
-                                    <div className='join w-full'>
-                                        <button
-                                            type="button"
-                                            className={`btn join-item flex-1 ${!avecFacture ? 'btn-primary' : 'btn-outline'}`}
-                                            onClick={() => setAvecFacture(false)}
-                                        >
-                                            Sans facture
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`btn join-item flex-1 ${avecFacture ? 'btn-primary' : 'btn-outline'}`}
-                                            onClick={() => setAvecFacture(true)}
-                                        >
-                                            Avec facture
-                                        </button>
+                                    {/* Total à payer, bien visible */}
+                                    <div className='rounded-2xl bg-base-200 p-4 text-center'>
+                                        <p className='text-sm font-normal opacity-70'>
+                                            {nombreArticles} article{nombreArticles > 1 ? 's' : ''}
+                                            {avecFacture ? `, HT ${totalHT.toLocaleString()}, TVA ${tva.toLocaleString()}` : ''}
+                                        </p>
+                                        <p className='text-sm font-semibold'>Total à payer</p>
+                                        <p className='text-4xl font-bold tabular-nums text-primary'>{totalTTC.toLocaleString()}</p>
                                     </div>
 
-                                    {avecFacture && (
-                                        <div className='space-y-3 rounded-2xl border border-primary p-3'>
-                                            <label className='flex flex-col gap-1'>
-                                                <span className='text-sm font-normal opacity-70'>Nom du client *</span>
-                                                <input
-                                                    type="text"
-                                                    className='input input-bordered w-full'
-                                                    value={clientNom}
-                                                    onChange={(e) => setClientNom(e.target.value)}
-                                                />
-                                            </label>
-                                            <div className='flex items-center justify-between gap-3'>
+                                    {/* Monnaie à rendre (facultatif) */}
+                                    <div className='space-y-2'>
+                                        <label htmlFor='recu' className='text-sm font-normal opacity-70'>
+                                            Montant reçu du client (facultatif). Laissez vide si le client paie tout ; s&apos;il paie moins, la différence devient une dette.
+                                        </label>
+                                        <input
+                                            id='recu'
+                                            type="number"
+                                            inputMode="numeric"
+                                            min="0"
+                                            placeholder={`Exact : ${totalTTC.toLocaleString()}`}
+                                            value={recu}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => setRecu(e.target.value)}
+                                            className='input input-bordered h-12 w-full text-lg font-bold'
+                                        />
+                                        {enDette && (
+                                            <div className='space-y-2 rounded-xl bg-warning/15 px-3 py-2'>
+                                                <div className='flex items-center justify-between gap-3'>
+                                                    <span className='font-semibold'>Reste dû : sera enregistré en dette</span>
+                                                    <span className='text-xl font-bold tabular-nums'>{resteDu.toLocaleString()}</span>
+                                                </div>
+                                                {/* Avec facture, le nom du client est déjà demandé plus bas */}
+                                                {!avecFacture && (
+                                                    <label className='flex flex-col gap-1'>
+                                                        <span className='text-sm font-normal opacity-70'>Nom du client (pour la dette) *</span>
+                                                        <input
+                                                            type="text"
+                                                            className='input input-bordered w-full'
+                                                            value={clientNom}
+                                                            onChange={(e) => setClientNom(e.target.value)}
+                                                        />
+                                                    </label>
+                                                )}
+                                            </div>
+                                        )}
+                                        {recuNombre !== null && !enDette && (
+                                            <div className='flex items-center justify-between rounded-xl bg-success/15 px-3 py-2'>
+                                                <span className='font-semibold text-success'>Monnaie à rendre</span>
+                                                <span className='text-xl font-bold tabular-nums text-success'>{aRendre.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Facture (facultative) */}
+                                    <div className='space-y-3'>
+                                        <label className='flex cursor-pointer items-center gap-3'>
+                                            <input
+                                                type="checkbox"
+                                                className='checkbox checkbox-primary'
+                                                checked={avecFacture}
+                                                onChange={(e) => setAvecFacture(e.target.checked)}
+                                            />
+                                            <span className='font-semibold'>Faire une facture</span>
+                                        </label>
+
+                                        {avecFacture && (
+                                            <div className='space-y-3 rounded-2xl border border-primary p-3'>
+                                                <label className='flex flex-col gap-1'>
+                                                    <span className='text-sm font-normal opacity-70'>Nom du client *</span>
+                                                    <input
+                                                        type="text"
+                                                        className='input input-bordered w-full'
+                                                        value={clientNom}
+                                                        onChange={(e) => setClientNom(e.target.value)}
+                                                    />
+                                                </label>
                                                 <label className='flex items-center gap-2'>
                                                     <span className='font-semibold'>TVA</span>
                                                     <input
@@ -507,88 +582,7 @@ const page = () => {
                                                     />
                                                     <span className='font-semibold'>%</span>
                                                 </label>
-                                                <span className='font-bold tabular-nums text-warning'>{tva.toLocaleString()}</span>
                                             </div>
-                                        </div>
-                                    )}
-
-                                    {/* Totaux */}
-                                    <div className='space-y-1'>
-                                        <div className='flex items-center justify-between'>
-                                            <span className='text-sm font-normal opacity-70'>
-                                                {nombreArticles} article{nombreArticles > 1 ? 's' : ''}, montant HT
-                                            </span>
-                                            <span className='font-bold tabular-nums'>{totalHT.toLocaleString()}</span>
-                                        </div>
-                                        <div className='flex items-baseline justify-between'>
-                                            <span className='font-semibold'>Montant à payer</span>
-                                            <span className='text-3xl font-bold tabular-nums text-primary'>
-                                                {totalTTC.toLocaleString()}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Paiement */}
-                                    <div className='space-y-2 rounded-2xl bg-base-200 p-3'>
-                                        <label htmlFor='montantPaye' className='text-sm font-normal opacity-70'>Montant payé par le client</label>
-                                        <div className='flex gap-2'>
-                                            <input
-                                                id='montantPaye'
-                                                type="number"
-                                                inputMode="numeric"
-                                                min="0"
-                                                placeholder="0"
-                                                value={paye === 0 ? "" : paye}
-                                                onFocus={(e) => e.target.select()}
-                                                onChange={(e) => {
-                                                    const value = Number(e.target.value)
-                                                    setPayeExact(false)
-                                                    setMontantPaye(isNaN(value) || value < 0 ? 0 : value)
-                                                }}
-                                                className='input input-bordered h-12 flex-1 text-lg font-bold'
-                                            />
-                                            <button
-                                                type="button"
-                                                className={`btn h-12 ${payeExact ? 'btn-success' : 'btn-outline btn-success'}`}
-                                                onClick={() => setPayeExact(true)}
-                                            >
-                                                Montant exact
-                                            </button>
-                                        </div>
-
-                                        {/* Résultat : à rendre ou dette */}
-                                        {difference >= 0 ? (
-                                            <div className='flex items-center justify-between rounded-xl bg-success/15 px-3 py-2'>
-                                                <span className='font-semibold text-success'>À rendre au client</span>
-                                                <span className='text-xl font-bold tabular-nums text-success'>{difference.toLocaleString()}</span>
-                                            </div>
-                                        ) : (
-                                            <div className='rounded-xl bg-error/15 px-3 py-2'>
-                                                <div className='flex items-center justify-between'>
-                                                    <span className='font-semibold text-error'>
-                                                        {paye === 0 ? 'Aucun paiement : dette' : 'Reste dû : dette'}
-                                                    </span>
-                                                    <span className='text-xl font-bold tabular-nums text-error'>{Math.abs(difference).toLocaleString()}</span>
-                                                </div>
-                                                <p className='mt-1 text-xs font-normal text-error'>
-                                                    Si le client a payé comptant, appuyez sur « Montant exact ».
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Nom du client pour la dette (vente sans facture) */}
-                                        {!avecFacture && enDette && (
-                                            <label htmlFor='clientNom' className='flex flex-col gap-1'>
-                                                <span className='text-sm font-normal opacity-70'>Nom du client (pour la dette)</span>
-                                                <input
-                                                    id='clientNom'
-                                                    type="text"
-                                                    placeholder='Nom du client'
-                                                    value={clientNom}
-                                                    className='input input-bordered w-full'
-                                                    onChange={(e) => setClientNom(e.target.value)}
-                                                />
-                                            </label>
                                         )}
                                     </div>
 
@@ -601,11 +595,11 @@ const page = () => {
                                         {enCours ? (
                                             <span className='loading loading-spinner loading-sm'></span>
                                         ) : avecFacture ? (
-                                            "Confirmer et générer la facture"
+                                            enDette ? `Valider la facture (dette de ${resteDu.toLocaleString()})` : "Valider et faire la facture"
                                         ) : enDette ? (
-                                            `Confirmer (dette de ${Math.abs(difference).toLocaleString()})`
+                                            `Valider (dette de ${resteDu.toLocaleString()})`
                                         ) : (
-                                            "Confirmer la vente"
+                                            "Valider la vente"
                                         )}
                                     </button>
                                 </div>
@@ -620,17 +614,22 @@ const page = () => {
                 </section>
             </div>
 
-            {/* Barre fixe sur téléphone : total + accès rapide au paiement, posée juste au-dessus de la barre de navigation */}
+            {/* Barre fixe sur téléphone : total + validation directe, posée juste au-dessus de la barre de navigation */}
             {order.length > 0 && (
                 <div
                     className='fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom,0px))] z-40 flex items-center gap-3 border-t border-base-300 bg-base-100 px-4 py-3 shadow-lg md:hidden print:hidden'
                 >
-                    <div className='min-w-0 flex-1'>
-                        <p className='text-xs font-normal opacity-60'>{nombreArticles} article{nombreArticles > 1 ? 's' : ''}</p>
+                    <button type="button" className='min-w-0 flex-1 text-left' onClick={allerAuResume}>
+                        <p className='text-xs font-normal opacity-60'>{nombreArticles} article{nombreArticles > 1 ? 's' : ''}, voir le détail</p>
                         <p className='text-xl font-bold leading-tight tabular-nums text-primary'>{totalTTC.toLocaleString()}</p>
-                    </div>
-                    <button type="button" className='btn btn-primary' onClick={allerAuResume}>
-                        Finaliser
+                    </button>
+                    <button
+                        type="button"
+                        className={`btn ${enDette ? 'btn-warning' : 'btn-primary'}`}
+                        onClick={handleSubmit}
+                        disabled={enCours}
+                    >
+                        {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'Valider'}
                     </button>
                 </div>
             )}
@@ -699,12 +698,6 @@ const page = () => {
                                 <span>Payé :</span>
                                 <span>{derniereFacture.montantPaye.toLocaleString()} FBU</span>
                             </div>
-                            {derniereFacture.solde < 0 && (
-                                <div className='flex justify-between text-red-600 font-bold'>
-                                    <span>Solde dû :</span>
-                                    <span>{Math.abs(derniereFacture.solde).toLocaleString()} FBU</span>
-                                </div>
-                            )}
                         </div>
                     </div>
 

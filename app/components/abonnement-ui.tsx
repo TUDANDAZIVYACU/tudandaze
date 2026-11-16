@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { BoutonsExport } from './suivi-ui'
 import { nomFichierSur, type TableauExport } from '@/lib/export-tableau'
 
@@ -108,8 +109,18 @@ export function PaiementsClientModal({
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4' onClick={onClose}>
-      <div className='w-full max-w-xl space-y-3 rounded-3xl bg-base-100 p-5' onClick={(e) => e.stopPropagation()}>
-        <div className='flex items-start justify-between gap-3'>
+      <div className='relative w-full max-w-xl space-y-3 rounded-3xl bg-base-100 p-5' onClick={(e) => e.stopPropagation()}>
+        {/* X de fermeture, dans le coin supérieur droit */}
+        <button
+          type='button'
+          aria-label='Fermer'
+          title='Fermer'
+          className='btn btn-sm btn-circle btn-ghost absolute right-2 top-2'
+          onClick={onClose}
+        >
+          <X className='h-4 w-4' />
+        </button>
+        <div className='flex items-start justify-between gap-3 pr-8'>
           <div className='min-w-0'>
             <p className='text-xs uppercase text-gray-600'>Historique des paiements</p>
             <h2 className='break-words text-lg font-bold'>{clientNom}</h2>
@@ -119,7 +130,6 @@ export function PaiementsClientModal({
           </div>
           <div className='flex shrink-0 flex-wrap items-center justify-end gap-2'>
             <BoutonsExport tableau={tableauExport} />
-            <button className='btn btn-sm btn-ghost' onClick={onClose}>FERMER</button>
           </div>
         </div>
 
