@@ -121,17 +121,35 @@ export default function Home() {
 
   return (
     <Wrapper compact>
-      {/* En-tête : journée consultée à gauche, sélecteur de date à droite */}
-      <section className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0">
+      {/* En-tête. Ordinateur : journée consultée à gauche, sélecteur de date à droite.
+          Téléphone : journée et sélecteur de date à gauche, « Valeur du stock » à leur droite. */}
+      <section className="mb-4 flex items-start justify-between gap-3 md:flex-wrap md:items-end md:gap-x-4 md:gap-y-3">
+        <div className="min-w-0 flex-1 space-y-2 md:flex-none md:space-y-0">
           <h1 className="text-xl font-bold leading-tight first-letter:uppercase sm:text-2xl md:text-3xl">
             {titre}
           </h1>
+          <input
+            aria-label="Choisir la date"
+            type="date"
+            className="input input-bordered input-sm max-w-full bg-base-100 md:hidden"
+            value={dateFiltre}
+            onChange={(e) => setDateFiltre(e.target.value)}
+          />
         </div>
+
+        {/* Téléphone seulement : valeur du stock à droite de la date */}
+        <div className="shrink-0 rounded-2xl bg-base-100 p-3 text-right shadow-sm md:hidden">
+          <p className="text-xs font-medium text-base-content/60">Valeur du stock</p>
+          <p className="text-lg font-bold tabular-nums text-primary">
+            {dashboard ? dashboard.stockValue.toLocaleString() : "…"}
+          </p>
+          <p className="text-[11px] text-base-content/50">au prix de vente</p>
+        </div>
+
         <input
           aria-label="Choisir la date"
           type="date"
-          className="input input-bordered input-sm max-w-full bg-base-100"
+          className="input input-bordered input-sm hidden max-w-full bg-base-100 md:block"
           value={dateFiltre}
           onChange={(e) => setDateFiltre(e.target.value)}
         />
@@ -139,7 +157,7 @@ export default function Home() {
 
       {/* Chiffres clés de la journée */}
       <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <div className="col-span-2 lg:col-span-1">
+        <div className="hidden md:col-span-2 md:block lg:col-span-1">
           <CarteChiffre
             libelle="Valeur du stock"
             valeur={dashboard ? dashboard.stockValue.toLocaleString() : "…"}
@@ -171,7 +189,7 @@ export default function Home() {
         /* Téléphone : récapitulatif, achats et ventes, puis état du stock.
            Ordinateur : récapitulatif et opérations à gauche, l'état du stock reste à droite. */
         <div className="grid gap-4 lg:grid-cols-12">
-          <div className="order-1 lg:order-none lg:col-span-7">
+          <div className="order-2 lg:order-none lg:col-span-7">
             <ProductOverview
               email={email}
               dateFiltre={dateFiltre}
@@ -182,7 +200,7 @@ export default function Home() {
           <div className="order-3 lg:order-none lg:col-span-5 lg:row-span-2">
             <StockSummaryTable email={email} dateFiltre={dateFiltre} donnees={dashboard?.summary ?? null} />
           </div>
-          <div className="order-2 lg:order-none lg:col-span-7">
+          <div className="order-1 lg:order-none lg:col-span-7">
             <RecentTransactions
               email={email}
               dateFiltre={dateFiltre}
