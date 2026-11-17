@@ -3,9 +3,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import type { Depense } from '@prisma/client'
-import { createDepense, readDepenses, updateDepense, getBusinessName } from '../actions'
+import { createDepense, readDepenses, updateDepense, deleteDepense, getBusinessName } from '../actions'
 import { toast } from 'react-toastify'
-import { Pencil, Plus, X, Download, RotateCcw } from 'lucide-react'
+import { Pencil, Trash, Plus, X, Download, RotateCcw } from 'lucide-react'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
 import { Kpi, CarteBarres, CarteAnalyse, BoutonsPeriode, type Analyse } from '../components/analyse-ui'
 import { PERIODES, bornesPeriode, periodePrecedente, nbJours, fmt, variationPct, type PeriodeId } from '@/lib/periodes'
@@ -137,6 +137,18 @@ const DepensesPage = () => {
     })
     setEditingId(depense.id)
     setShowModal(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Confirmer la suppression ?")) return
+    try {
+      await deleteDepense(id, email)
+      toast.success("Dépense supprimée")
+      notifierStock()
+    } catch (error) {
+      console.error(error)
+      toast.error("Erreur lors de la suppression")
+    }
   }
 
   const resetFiltres = () => {
@@ -461,6 +473,14 @@ const DepensesPage = () => {
                     onClick={() => handleEdit(depense)}
                   >
                     <Pencil className='h-4 w-4' />
+                  </button>
+                  <button
+                    type='button'
+                    className='btn btn-ghost btn-sm btn-circle text-error'
+                    aria-label="Supprimer la dépense"
+                    onClick={() => handleDelete(depense.id)}
+                  >
+                    <Trash className='h-4 w-4' />
                   </button>
                 </div>
               </div>

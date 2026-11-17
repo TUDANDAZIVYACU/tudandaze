@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import { FormDataType, Product } from '@/type'
-import { createProduct, readProductsWithRealQuantity, checkProductNameExists, getBusinessName } from '../actions'
+import { createProduct, deleteProduct, readProductsWithRealQuantity, checkProductNameExists, getBusinessName } from '../actions'
+import { getProduitsVendus } from '../actions-transactions'
 import { toast } from 'react-toastify'
 import ProductComponent from '../components/ProductComponent'
 import EmptyState from '../components/EmptyState'
@@ -22,6 +23,7 @@ const CreerProduitPage = () => {
   const email = user?.primaryEmailAddress?.emailAddress as string
 
   const [products, setProducts] = useState<Product[]>([])
+  const [produitsVendus, setProduitsVendus] = useState<Set<string>>(new Set())
   const [nomEntreprise, setNomEntreprise] = useState<string>("")
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -69,10 +71,15 @@ const CreerProduitPage = () => {
     }
   }
 
+  // Produits + liste des produits déjà vendus, chargés ensemble pour que le bouton SUPPRIMER n'apparaisse pas à tort
   const fetchProducts = async (userEmail: string) => {
     try {
-      const data = await readProductsWithRealQuantity(userEmail)
+      const [data, vendus] = await Promise.all([
+        readProductsWithRealQuantity(userEmail),
+        getProduitsVendus(userEmail)
+      ])
       if (data) setProducts(data)
+      setProduitsVendus(new Set(vendus))
     } catch (error) {
       console.error(error)
     }
@@ -206,6 +213,21 @@ const CreerProduitPage = () => {
       toast.error(error?.message || "Il y a une erreur")
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteProduct = async (product: Product) => {
+    const confirmDelete = confirm("Voulez-vous vraiment supprimer ce produit ?")
+    if (!confirmDelete) return
+    try {
+      await deleteProduct(product.id, email)
+      toast.success("Produit supprimé avec succès")
+
+      // Informe toute l'application qu'un produit a été supprimé
+      notifierStock()
+    } catch (error: any) {
+      console.error(error)
+      toast.error(error?.message || "Erreur lors de la suppression")
     }
   }
 
@@ -557,6 +579,8 @@ const CreerProduitPage = () => {
                     product={product}
                     handleAddToCart={() => {}}
                     showDetails={true}
+                    onDelete={handleDeleteProduct}
+                    dejaVendu={produitsVendus.has(product.id)}
                   />
                 ))
               ) : (

@@ -51,7 +51,7 @@ export default async function AbonnementPage() {
           <h2 className="text-lg font-bold">Payer ou prolonger</h2>
           {enCours && (
             <p className="text-sm opacity-70 normal-case font-normal">
-              Si vous payez à l&apos;avance : les mois payés s&apos;ajoutent à la fin de l'abonnement actuel.
+              Vous pouvez payer à l&apos;avance : les mois payés s&apos;ajoutent à la fin de votre abonnement actuel.
             </p>
           )}
           <BillingForm />

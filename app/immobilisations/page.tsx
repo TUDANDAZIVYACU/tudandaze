@@ -4,13 +4,14 @@ import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import { envoyerPhoto as envoyerVersStockage } from '@/lib/upload-photo'
 import { toast } from 'react-toastify'
-import { Wrench } from 'lucide-react'
+import { Trash2, Wrench } from 'lucide-react'
 import { BoutonsExport } from '../components/suivi-ui'
 import { Kpi, CarteBarres } from '../components/analyse-ui'
 import { nomFichierSur, type TableauExport } from '@/lib/export-tableau'
 import {
   createImmobilisation,
-  readImmobilisations
+  readImmobilisations,
+  deleteImmobilisation
 } from '../actions-immobilisations'
 import { getBusinessName } from '../actions'
 
@@ -24,6 +25,8 @@ type Equipement = {
   photoUrl: string | null
   createdAt: Date | string
 }
+
+const VINGT_QUATRE_HEURES_MS = 24 * 60 * 60 * 1000
 
 // Date du jour au Burundi (AAAA-MM-JJ)
 const aujourdhui = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Bujumbura' })
@@ -259,6 +262,23 @@ const page = () => {
     }
   }
 
+  const supprimer = async (equipement: Equipement) => {
+    if (!email) return
+    if (!confirm(`Supprimer l'équipement « ${equipement.designation} » ?`)) return
+    try {
+      const res = await deleteImmobilisation(equipement.id, email)
+      if (res.success) {
+        toast.success('Équipement supprimé avec succès')
+        await charger(email)
+      } else {
+        toast.error(res.message)
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error('Erreur réseau. Réessayez.')
+    }
+  }
+
   // ───────── Recherche, chiffres clés et export ─────────
   const [recherche, setRecherche] = useState('')
   const [nomEntreprise, setNomEntreprise] = useState('')
@@ -467,6 +487,7 @@ const page = () => {
                   {visibles.map((e) => {
                     const factureOk = e.factureUrl && e.factureUrl.startsWith('https://')
                     const photoOk = e.photoUrl && e.photoUrl.startsWith('https://')
+                    const peutSupprimer = Date.now() - new Date(e.createdAt).getTime() <= VINGT_QUATRE_HEURES_MS
                     return (
                       <div key={e.id} className='flex items-center gap-3 py-3'>
                         {photoOk ? (
@@ -508,6 +529,18 @@ const page = () => {
                           <p className='text-xs font-normal opacity-60'>Prix</p>
                           <p className='font-bold tabular-nums text-success'>{fmt(e.prix)}</p>
                         </div>
+
+                        {peutSupprimer && (
+                          <button
+                            type="button"
+                            aria-label="Supprimer l'équipement"
+                            title="Supprimer (possible pendant 24h)"
+                            className='btn btn-ghost btn-sm btn-circle text-error shrink-0'
+                            onClick={() => supprimer(e)}
+                          >
+                            <Trash2 className='h-4 w-4' />
+                          </button>
+                        )}
                       </div>
                     )
                   })}

@@ -7,6 +7,8 @@ import { getTransactions, getBusinessName } from '../actions'
 import { deleteTransaction, annulerVente } from '../actions-transactions'
 import EmptyState from '../components/EmptyState'
 import TransactionComponent from '../components/TransactionComponent'
+import { Kpi, CarteBarres, CarteAnalyse, BoutonsPeriode, type Analyse } from '../components/analyse-ui'
+import { PERIODES, bornesPeriode, periodePrecedente, fmt, variationPct, type PeriodeId } from '@/lib/periodes'
 import { Download, RotateCcw } from 'lucide-react'
 import { toast } from 'react-toastify'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
@@ -51,6 +53,8 @@ const getPrecedingPurchaseUnitPrice = (saleTx: Transaction, allTransactions: Tra
 
     return priorPurchases.length > 0 ? (priorPurchases[0].prixAchat || 0) : 0
 }
+
+type VentesProduit = { nom: string; quantite: number; montant: number }
 
 const page = () => {
 
@@ -180,35 +184,130 @@ const page = () => {
         }
     })
 
-    // Calcul des totaux Achats / Ventes sur les transactions filtrées
-    const totalAchats = filteredTransactions
-        .filter((tx) => tx.type === "IN")
-        .reduce((sum, tx) => {
-            const prixUnitaire = tx.prixAchat || 0
-            return sum + prixUnitaire * tx.quantity
-        }, 0)
-
-    const totalVentes = filteredTransactions
-        .filter((tx) => tx.type !== "IN")
-        .reduce((sum, tx) => {
-            const prixUnitaire = tx.prixVente || tx.price || 0
-            return sum + prixUnitaire * tx.quantity
-        }, 0)
-
-    // Profit total = somme sur les ventes de (Prix de vente unitaire - Prix d'achat unitaire de l'achat précédent) * quantité
-    // NB: on recherche l'achat précédent dans TOUTES les transactions (pas seulement celles filtrées),
+    // Totaux Achats / Ventes / Profit d'une liste d'opérations.
+    // Profit = somme sur les ventes de (prix de vente unitaire - prix d'achat unitaire de l'achat précédent) × quantité.
+    // NB : l'achat précédent est cherché dans TOUTES les transactions (pas seulement celles filtrées),
     // car cet achat peut être antérieur à la plage de dates affichée.
-    const totalProfit = filteredTransactions
-        .filter((tx) => tx.type !== "IN")
-        .reduce((sum, tx) => {
-            const prixVenteUnitaire = tx.prixVente || tx.price || 0
-            const prixAchatUnitaire = getPrecedingPurchaseUnitPrice(tx, transactions)
-            return sum + (prixVenteUnitaire - prixAchatUnitaire) * tx.quantity
-        }, 0)
+    const calculerTotaux = (liste: Transaction[]) => {
+        const achats = liste
+            .filter((tx) => tx.type === "IN")
+            .reduce((sum, tx) => sum + (tx.prixAchat || 0) * tx.quantity, 0)
+        const ventes = liste
+            .filter((tx) => tx.type !== "IN")
+            .reduce((sum, tx) => sum + (tx.prixVente || tx.price || 0) * tx.quantity, 0)
+        const profit = liste
+            .filter((tx) => tx.type !== "IN")
+            .reduce((sum, tx) => {
+                const prixVenteUnitaire = tx.prixVente || tx.price || 0
+                const prixAchatUnitaire = getPrecedingPurchaseUnitPrice(tx, transactions)
+                return sum + (prixVenteUnitaire - prixAchatUnitaire) * tx.quantity
+            }, 0)
+        return { achats, ventes, profit }
+    }
+
+    const { achats: totalAchats, ventes: totalVentes, profit: totalProfit } = calculerTotaux(filteredTransactions)
 
     const nomProduitFiltre = selectedProductId
         ? (produitsFiltre.find((p) => p.id === selectedProductId)?.name ?? "")
         : "Tous les produits"
+
+    // ───────── Période, comparaison et analyse ─────────
+    const periodeActive = PERIODES.find((pr) => {
+        const b = bornesPeriode(pr.id)
+        return b.debut === dateFrom && b.fin === dateTo
+    })?.id
+    const choisirPeriode = (id: PeriodeId) => {
+        const b = bornesPeriode(id)
+        setDateFrom(b.debut)
+        setDateTo(b.fin)
+    }
+
+    const periodeValide = !!dateFrom && !!dateTo && dateFrom <= dateTo
+
+    // Période précédente de même durée, avec le même filtre de produit
+    let totauxPrecedents: { achats: number; ventes: number; profit: number } | null = null
+    if (periodeValide) {
+        const prec = periodePrecedente(dateFrom, dateTo)
+        const txPrecedentes = transactions.filter((tx) => {
+            if (selectedProductId && tx.productId !== selectedProductId) return false
+            const jour = toLocalDateStr(tx.createdAt)
+            return jour >= prec.debut && jour <= prec.fin
+        })
+        totauxPrecedents = calculerTotaux(txPrecedentes)
+    }
+    const pctVentes = variationPct(totalVentes, totauxPrecedents?.ventes)
+    const pctAchats = variationPct(totalAchats, totauxPrecedents?.achats)
+    const pctProfit = variationPct(totalProfit, totauxPrecedents?.profit)
+
+    // Produits les plus vendus de la période (par montant)
+    const ventesParProduit = (Object.values as (o: Record<string, VentesProduit>) => VentesProduit[])(
+        filteredTransactions
+            .filter((tx) => tx.type !== "IN")
+            .reduce<Record<string, VentesProduit>>((acc, tx) => {
+                const ligne = acc[tx.productId] ?? { nom: tx.productName || "", quantite: 0, montant: 0 }
+                acc[tx.productId] = {
+                    nom: ligne.nom,
+                    quantite: ligne.quantite + tx.quantity,
+                    montant: ligne.montant + (tx.prixVente || tx.price || 0) * tx.quantity
+                }
+                return acc
+            }, {})
+    ).sort((a, b) => b.montant - a.montant)
+
+    // Meilleur jour de vente
+    const ventesParJour = (Object.entries as (o: Record<string, number>) => [string, number][])(
+        filteredTransactions
+            .filter((tx) => tx.type !== "IN")
+            .reduce<Record<string, number>>((acc, tx) => {
+                const jour = toLocalDateStr(tx.createdAt)
+                acc[jour] = (acc[jour] ?? 0) + (tx.prixVente || tx.price || 0) * tx.quantity
+                return acc
+            }, {})
+    ).sort((a, b) => b[1] - a[1])
+
+    const nombreVentes = new Set(
+        filteredTransactions.filter((tx) => tx.type !== "IN").map((tx) => tx.venteId ?? tx.id)
+    ).size
+
+    const analyses: Analyse[] = []
+    if (filteredTransactions.length === 0) {
+        analyses.push({ ton: 'info', texte: 'Aucune opération sur cette période.' })
+    } else {
+        if (totalVentes > 0) {
+            analyses.push({
+                ton: totalProfit >= 0 ? 'ok' : 'alerte',
+                texte: `Profit de ${fmt(totalProfit)} FBU sur ${fmt(totalVentes)} FBU de ventes, soit ${Math.round((totalProfit / totalVentes) * 100)} % de marge.`
+            })
+        }
+        if (ventesParProduit.length > 0 && totalVentes > 0) {
+            const meilleur = ventesParProduit[0]
+            analyses.push({
+                ton: 'info',
+                texte: `Produit le plus vendu : « ${meilleur.nom} », ${meilleur.quantite.toLocaleString('fr-FR')} vendus pour ${fmt(meilleur.montant)} FBU (${Math.round((meilleur.montant / totalVentes) * 100)} % des ventes).`
+            })
+        }
+        if (ventesParJour.length > 1) {
+            analyses.push({
+                ton: 'info',
+                texte: `Meilleur jour de vente : ${dateLongue(ventesParJour[0][0])}, ${fmt(ventesParJour[0][1])} FBU.`
+            })
+        }
+        if (pctVentes !== null && Math.abs(pctVentes) >= 1) {
+            analyses.push({
+                ton: pctVentes > 0 ? 'ok' : 'alerte',
+                texte: `Les ventes ont ${pctVentes > 0 ? 'augmenté' : 'baissé'} de ${Math.abs(Math.round(pctVentes))} % par rapport à la période précédente (${fmt(totauxPrecedents?.ventes ?? 0)} FBU).`
+            })
+        }
+        if (pctAchats !== null && Math.abs(pctAchats) >= 1) {
+            analyses.push({
+                ton: 'info',
+                texte: `Les achats ont ${pctAchats > 0 ? 'augmenté' : 'baissé'} de ${Math.abs(Math.round(pctAchats))} % par rapport à la période précédente (${fmt(totauxPrecedents?.achats ?? 0)} FBU).`
+            })
+        }
+        if (totalVentes === 0 && totalAchats > 0) {
+            analyses.push({ ton: 'info', texte: 'Il y a eu des achats mais aucune vente sur cette période.' })
+        }
+    }
 
     const handleExportPDF = async () => {
         if (!pdfContentRef.current) return
@@ -313,31 +412,47 @@ const page = () => {
                     </button>
                 </div>
 
-                {/* Bilan de la période affichée : trois cartes */}
+                {/* Chiffres clés de la période, comparés à la période précédente */}
                 <section>
-                    <div className='grid grid-cols-3 gap-3'>
-                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Achats</p>
-                            <p className='text-lg font-bold tabular-nums text-warning md:text-3xl'>{totalAchats.toLocaleString()}</p>
-                        </div>
-                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Ventes</p>
-                            <p className='text-lg font-bold tabular-nums text-success md:text-3xl'>{totalVentes.toLocaleString()}</p>
-                        </div>
-                        <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-                            <p className='text-xs font-normal opacity-70 md:text-sm'>Profit</p>
-                            <p className={`text-lg font-bold tabular-nums md:text-3xl ${totalProfit >= 0 ? 'text-success' : 'text-error'}`}>
-                                {totalProfit.toLocaleString()}
-                            </p>
-                        </div>
+                    <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+                        <Kpi
+                            libelle='Achats'
+                            valeur={fmt(totalAchats)}
+                            classeValeur='text-warning'
+                            pct={pctAchats}
+                            bonSiHausse={false}
+                        />
+                        <Kpi
+                            libelle='Ventes'
+                            valeur={fmt(totalVentes)}
+                            classeValeur='text-success'
+                            pct={pctVentes}
+                        />
+                        <Kpi
+                            libelle='Profit'
+                            valeur={fmt(totalProfit)}
+                            classeValeur={totalProfit >= 0 ? 'text-success' : 'text-error'}
+                            pct={pctProfit}
+                        />
+                        <Kpi
+                            libelle='Opérations'
+                            valeur={String(filteredTransactions.length)}
+                            unite=''
+                            classeValeur='text-primary'
+                            note={`${nombreVentes} vente${nombreVentes > 1 ? 's' : ''}`}
+                        />
                     </div>
                     <p className='mt-2 text-xs font-normal opacity-60'>
                         Profit : pour chaque vente, prix de vente moins prix d&apos;achat du dernier approvisionnement.
                     </p>
                 </section>
 
-                {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
+                {/* Filtres : période, produit et dates. Sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
                 <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
+                    <div className='col-span-3 md:col-span-4'>
+                        <BoutonsPeriode actif={periodeActive} onChoisir={choisirPeriode} />
+                    </div>
+
                     <label className='col-span-3 flex flex-col gap-1 md:col-span-1'>
                         <span className='text-sm font-normal opacity-70'>Produit</span>
                         <select aria-label="Filtrer par produit"
@@ -388,6 +503,24 @@ const page = () => {
                         <span className='hidden md:inline'>Réinitialiser</span>
                     </button>
                 </section>
+
+                {/* Produits les plus vendus et analyse */}
+                {filteredTransactions.length > 0 && (
+                    <div className='grid gap-4 lg:grid-cols-12'>
+                        <CarteBarres
+                            titre='Produits les plus vendus'
+                            classe='bg-success'
+                            className='lg:col-span-5'
+                            vide='Aucune vente sur cette période.'
+                            lignes={ventesParProduit.slice(0, 5).map((v) => ({
+                                libelle: v.nom,
+                                valeur: v.montant,
+                                detail: `${v.quantite.toLocaleString('fr-FR')} vendus`
+                            }))}
+                        />
+                        <CarteAnalyse titre='Analyse de la période' analyses={analyses} className='lg:col-span-7' />
+                    </div>
+                )}
 
                 {/* Opérations, regroupées par jour */}
                 {transactions.length == 0 ? (

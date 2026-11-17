@@ -2,9 +2,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
-import { createDette, readDettes, updateDette, addPaiement, getBusinessName } from '../actions'
+import { createDette, readDettes, updateDette, deleteDette, addPaiement, deletePaiement, getBusinessName } from '../actions'
 import { toast } from 'react-toastify'
-import { Pencil, Plus, X, CreditCard, ChevronDown, ChevronUp, RefreshCw, RotateCcw, Download } from 'lucide-react'
+import { Pencil, Trash, Plus, X, CreditCard, ChevronDown, ChevronUp, RefreshCw, RotateCcw, Download } from 'lucide-react'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
 import { Kpi, CarteBarres, CarteAnalyse, BoutonsPeriode, type Analyse } from '../components/analyse-ui'
 import { PERIODES, bornesPeriode, periodePrecedente, fmt, variationPct, type PeriodeId } from '@/lib/periodes'
@@ -168,6 +168,30 @@ const DettesPage = () => {
     })
     setEditingId(dette.id)
     setShowDetteModal(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Confirmer la suppression ?")) return
+    try {
+      await deleteDette(id, email)
+      toast.success("Dette supprimée")
+      notifierStock()
+    } catch (error) {
+      console.error(error)
+      toast.error("Erreur lors de la suppression")
+    }
+  }
+
+  const handleDeletePaiement = async (paiementId: string, detteId: string) => {
+    if (!confirm("Supprimer ce paiement ?")) return
+    try {
+      await deletePaiement(paiementId, detteId, email)
+      toast.success("Paiement supprimé")
+      notifierStock()
+    } catch (error) {
+      console.error(error)
+      toast.error("Erreur lors de la suppression")
+    }
   }
 
   const ouvrirPaiement = (detteId: string) => {
@@ -646,6 +670,14 @@ const DettesPage = () => {
                         >
                           <Pencil className='h-4 w-4' />
                         </button>
+                        <button
+                          type='button'
+                          className='btn btn-ghost btn-sm btn-circle text-error'
+                          aria-label="Supprimer la dette"
+                          onClick={() => handleDelete(dette.id)}
+                        >
+                          <Trash className='h-4 w-4' />
+                        </button>
                       </div>
                     </div>
 
@@ -661,6 +693,14 @@ const DettesPage = () => {
                                 {p.note && `, ${p.note}`}
                               </p>
                             </div>
+                            <button
+                              type='button'
+                              className='btn btn-ghost btn-xs btn-circle text-error'
+                              aria-label="Supprimer le paiement"
+                              onClick={() => handleDeletePaiement(p.id, dette.id)}
+                            >
+                              <Trash className='h-3.5 w-3.5' />
+                            </button>
                           </li>
                         ))}
                       </ul>
