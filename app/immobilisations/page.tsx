@@ -4,12 +4,15 @@ import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import { envoyerPhoto as envoyerVersStockage } from '@/lib/upload-photo'
 import { toast } from 'react-toastify'
-import { Trash2 } from 'lucide-react'
+import { Wrench } from 'lucide-react'
+import { BoutonsExport } from '../components/suivi-ui'
+import { Kpi, CarteBarres } from '../components/analyse-ui'
+import { nomFichierSur, type TableauExport } from '@/lib/export-tableau'
 import {
   createImmobilisation,
-  readImmobilisations,
-  deleteImmobilisation
+  readImmobilisations
 } from '../actions-immobilisations'
+import { getBusinessName } from '../actions'
 
 type Equipement = {
   id: string
@@ -21,8 +24,6 @@ type Equipement = {
   photoUrl: string | null
   createdAt: Date | string
 }
-
-const VINGT_QUATRE_HEURES_MS = 24 * 60 * 60 * 1000
 
 // Date du jour au Burundi (AAAA-MM-JJ)
 const aujourdhui = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Bujumbura' })
@@ -69,14 +70,14 @@ const ChampPhoto = ({ label, preview, inputRef, onChoose, onClear }: {
   onChoose: (e: React.ChangeEvent<HTMLInputElement>) => void
   onClear: () => void
 }) => (
-  <div>
-    <label className='text-xs font-bold'>{label}</label>
+  <div className='flex flex-col gap-1'>
+    <span className='text-sm font-normal opacity-70'>{label}</span>
     <input
       ref={inputRef}
       type="file"
       accept="image/*"
       onChange={onChoose}
-      className='file-input file-input-bordered file-input-sm w-full'
+      className='file-input file-input-bordered w-full'
     />
     {preview && (
       <div className='mt-2 flex items-start gap-3'>
@@ -258,181 +259,263 @@ const page = () => {
     }
   }
 
-  const supprimer = async (equipement: Equipement) => {
+  // ───────── Recherche, chiffres clés et export ─────────
+  const [recherche, setRecherche] = useState('')
+  const [nomEntreprise, setNomEntreprise] = useState('')
+
+  useEffect(() => {
     if (!email) return
-    if (!confirm(`Supprimer l'équipement « ${equipement.designation} » ?`)) return
-    try {
-      const res = await deleteImmobilisation(equipement.id, email)
-      if (res.success) {
-        toast.success('Équipement supprimé avec succès')
-        await charger(email)
-      } else {
-        toast.error(res.message)
-      }
-    } catch (error) {
-      console.error(error)
-      toast.error('Erreur réseau. Réessayez.')
-    }
-  }
+    getBusinessName(email)
+      .then((nom) => setNomEntreprise(nom))
+      .catch((error) => console.error(error))
+  }, [email])
+
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const visibles = equipements.filter((e) => {
+    const q = norm(recherche.trim())
+    return !q || norm(`${e.designation} ${e.numeroSerie ?? ''}`).includes(q)
+  })
+
+  const anneeDe = (e: Equipement) => new Date(e.dateAcquisition).getUTCFullYear()
+  const anneeCourante = Number(aujourdhui().slice(0, 4))
+  const acquisCetteAnnee = equipements.filter((e) => anneeDe(e) === anneeCourante)
+  const valeurAnnee = acquisCetteAnnee.reduce((acc, e) => acc + (e.prix ?? 0), 0)
+  const plusCher = equipements.reduce<Equipement | null>((m, e) => (m === null || e.prix > m.prix ? e : m), null)
+  const parAnnee = (Object.entries as (o: Record<string, { valeur: number; nombre: number }>) => [string, { valeur: number; nombre: number }][])(
+    equipements.reduce<Record<string, { valeur: number; nombre: number }>>((acc, e) => {
+      const cle = String(anneeDe(e))
+      const ligne = acc[cle] ?? { valeur: 0, nombre: 0 }
+      acc[cle] = { valeur: ligne.valeur + (e.prix ?? 0), nombre: ligne.nombre + 1 }
+      return acc
+    }, {})
+  ).sort((a, b) => Number(b[0]) - Number(a[0]))
+
+  const tableauExport: TableauExport | null =
+    equipements.length > 0
+      ? {
+          organisation: nomEntreprise || undefined,
+          titre: 'Liste des équipements',
+          sousTitre: `Édité le ${new Date().toLocaleDateString('fr-FR')}`,
+          nomFichier: `equipements-${nomFichierSur(nomEntreprise || 'entreprise')}`,
+          colonnes: ['Désignation', "Date d'acquisition", 'N° de série', 'Prix (FBU)'],
+          lignes: equipements.map((e) => [
+            e.designation,
+            new Date(e.dateAcquisition).toLocaleDateString('fr-FR', { timeZone: 'UTC' }),
+            e.numeroSerie ?? '',
+            Math.round(e.prix)
+          ]),
+          colonnesGras: [3],
+          resume: [
+            { libelle: 'Équipements', valeur: equipements.length },
+            { libelle: 'Valeur totale (FBU)', valeur: Math.round(valeurTotale), ton: 'vert' }
+          ],
+          totaux: [{ libelle: 'Valeur totale (FBU)', valeur: Math.round(valeurTotale), ton: 'vert' }]
+        }
+      : null
+
+  const champ = 'flex flex-col gap-1'
+  const libelle = 'text-sm font-normal opacity-70'
 
   return (
     <Wrapper>
-      <div className='grid md:grid-cols-2 gap-6 font-bold'>
+      <div className='space-y-4'>
 
-        {/* GAUCHE : formulaire d'enregistrement */}
-        <div>
-          <h1 className='text-2xl font-bold mb-2'>Enregistrer un équipement</h1>
-          <div className='space-y-3'>
-            <div>
-              <label className='text-xs font-bold'>Désignation *</label>
-              <input
-                type="text"
-                placeholder="Ex : Groupe électrogène"
-                className='input input-bordered w-full'
-                value={designation}
-                onChange={(e) => setDesignation(e.target.value)}
-              />
-            </div>
-
-            <div className='grid grid-cols-2 gap-3'>
-              <div>
-                <label className='text-xs font-bold'>Date d&apos;acquisition *</label>
-                <input
-                  type="date"
-                  className='input input-bordered w-full'
-                  value={dateAcquisition}
-                  max={aujourdhui()}
-                  onChange={(e) => setDateAcquisition(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className='text-xs font-bold'>Prix (FBU) *</label>
-                <input
-                  type="number"
-                  placeholder="0"
-                  min={0}
-                  className='input input-bordered w-full'
-                  value={prix === 0 ? '' : prix}
-                  onChange={(e) => setPrix(Number(e.target.value))}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className='text-xs font-bold'>Numéro de série</label>
-              <input
-                type="text"
-                className='input input-bordered w-full'
-                value={numeroSerie}
-                onChange={(e) => setNumeroSerie(e.target.value)}
-              />
-            </div>
-
-            <ChampPhoto
-              label="Photo de la facture (facultatif)"
-              preview={facturePreview}
-              inputRef={factureInputRef}
-              onChoose={choisirFacture}
-              onClear={viderFacture}
-            />
-
-            <ChampPhoto
-              label="Photo de l'équipement (facultatif)"
-              preview={photoPreview}
-              inputRef={photoInputRef}
-              onChoose={choisirPhoto}
-              onClear={viderPhoto}
-            />
+        {/* En-tête */}
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div>
+            <h1 className='text-2xl font-bold leading-tight md:text-3xl'>Équipements</h1>
+            <p className='text-sm font-normal opacity-60'>Le matériel de l&apos;entreprise et sa valeur</p>
           </div>
-
-          <button
-            onClick={enregistrer}
-            disabled={enCours}
-            className='btn btn-primary w-full mt-3 font-bold'
-          >
-            {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'ENREGISTRER'}
-          </button>
+          <BoutonsExport tableau={tableauExport} />
         </div>
 
-        {/* DROITE : liste des équipements */}
-        <div>
-          <div className='border-2 border-base-200 p-4 rounded-3xl mb-2 flex items-center justify-between gap-3'>
-            <div>
-              <h2 className='text-2xl font-bold'>
-                Équipements :
-                <span className='ml-2 text-red'>{equipements.length}</span>
-              </h2>
-            </div>
-            <div className='border-2 border-base-200 rounded-2xl px-4 py-2 text-center'>
-              <p className='text-xs font-bold text-gray-600'>VALEUR TOTALE</p>
-              <p className='text-base font-black text-success'>{fmt(valeurTotale)} FBU</p>
-            </div>
-          </div>
+        {/* Chiffres clés */}
+        <section className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+          <Kpi libelle='Équipements' valeur={String(equipements.length)} unite='' classeValeur='text-primary' />
+          <Kpi libelle='Valeur totale' valeur={fmt(valeurTotale)} classeValeur='text-success' />
+          <Kpi
+            libelle={`Acquis en ${anneeCourante}`}
+            valeur={fmt(valeurAnnee)}
+            note={`${acquisCetteAnnee.length} équipement${acquisCetteAnnee.length > 1 ? 's' : ''}`}
+          />
+          <Kpi
+            libelle='Équipement le plus cher'
+            valeur={fmt(plusCher?.prix ?? 0)}
+            note={plusCher ? plusCher.designation : 'aucun'}
+          />
+        </section>
 
-          <div className='space-y-3'>
-            {equipements.length === 0 && (
-              <p className='text-sm text-gray-500 normal-case'>Aucun équipement enregistré pour le moment.</p>
+        <div className='grid gap-4 lg:grid-cols-12'>
+
+          {/* GAUCHE : formulaire d'enregistrement */}
+          <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6 lg:col-span-5'>
+            <h2 className='text-lg font-bold'>Enregistrer un équipement</h2>
+
+            <div className='mt-4 space-y-4'>
+              <label className={champ}>
+                <span className={libelle}>Désignation *</span>
+                <input
+                  type="text"
+                  placeholder="Ex : Groupe électrogène"
+                  className='input input-bordered w-full'
+                  value={designation}
+                  onChange={(e) => setDesignation(e.target.value)}
+                />
+              </label>
+
+              <div className='grid grid-cols-2 gap-3'>
+                <label className={champ}>
+                  <span className={libelle}>Date d&apos;acquisition *</span>
+                  <input
+                    type="date"
+                    className='input input-bordered w-full'
+                    value={dateAcquisition}
+                    max={aujourdhui()}
+                    onChange={(e) => setDateAcquisition(e.target.value)}
+                  />
+                </label>
+                <label className={champ}>
+                  <span className={libelle}>Prix (FBU) *</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="0"
+                    min={0}
+                    className='input input-bordered w-full'
+                    value={prix === 0 ? '' : prix}
+                    onChange={(e) => setPrix(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+
+              <label className={champ}>
+                <span className={libelle}>Numéro de série</span>
+                <input
+                  type="text"
+                  className='input input-bordered w-full'
+                  value={numeroSerie}
+                  onChange={(e) => setNumeroSerie(e.target.value)}
+                />
+              </label>
+
+              <ChampPhoto
+                label="Photo de la facture (facultatif)"
+                preview={facturePreview}
+                inputRef={factureInputRef}
+                onChoose={choisirFacture}
+                onClear={viderFacture}
+              />
+
+              <ChampPhoto
+                label="Photo de l'équipement (facultatif)"
+                preview={photoPreview}
+                inputRef={photoInputRef}
+                onChoose={choisirPhoto}
+                onClear={viderPhoto}
+              />
+
+              <button
+                onClick={enregistrer}
+                disabled={enCours}
+                className='btn btn-primary h-12 w-full text-base'
+              >
+                {enCours ? <span className='loading loading-spinner loading-sm'></span> : 'Enregistrer'}
+              </button>
+            </div>
+          </section>
+
+          {/* DROITE : répartition par année et liste */}
+          <div className='space-y-4 lg:col-span-7'>
+            {parAnnee.length > 0 && (
+              <CarteBarres
+                titre="Valeur acquise par année"
+                classe='bg-primary'
+                lignes={parAnnee.map(([annee, v]) => ({
+                  libelle: annee,
+                  valeur: v.valeur,
+                  detail: `${v.nombre} équipement${v.nombre > 1 ? 's' : ''}`
+                }))}
+              />
             )}
 
-            {equipements.map((e) => {
-              const peutSupprimer = Date.now() - new Date(e.createdAt).getTime() <= VINGT_QUATRE_HEURES_MS
-              const factureOk = e.factureUrl && e.factureUrl.startsWith('https://')
-              const photoOk = e.photoUrl && e.photoUrl.startsWith('https://')
-              return (
-                <div key={e.id} className='border-2 border-base-200 p-4 rounded-3xl flex items-center gap-3'>
-                  {photoOk && (
-                    <a href={e.photoUrl as string} target='_blank' rel='noopener noreferrer' className='shrink-0'>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={e.photoUrl as string}
-                        alt={e.designation}
-                        className='h-16 w-16 rounded-xl border-2 border-base-200 object-cover'
-                      />
-                    </a>
-                  )}
+            <section className='rounded-2xl bg-base-100 p-5 shadow-sm md:p-6'>
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <h2 className='text-lg font-bold'>Liste des équipements</h2>
+                <span className='badge badge-primary badge-soft font-bold'>
+                  {visibles.length} équipement{visibles.length > 1 ? 's' : ''}
+                </span>
+              </div>
 
-                  <div className='flex-1 min-w-0'>
-                    <p className='font-bold text-base truncate'>{e.designation}</p>
-                    <p className='text-xs text-gray-600'>
-                      Acquis le {new Date(e.dateAcquisition).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}
-                    </p>
-                    {e.numeroSerie && (
-                      <p className='text-xs text-gray-600 truncate'>N° de série : {e.numeroSerie}</p>
-                    )}
-                    {factureOk && (
-                      <a
-                        href={e.factureUrl as string}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className='link link-primary text-xs font-bold inline-block mt-1'
-                      >
-                        Voir la facture
-                      </a>
-                    )}
-                  </div>
+              <input
+                type="text"
+                placeholder='Rechercher un équipement...'
+                aria-label='Rechercher un équipement'
+                className='input input-bordered mt-4 w-full'
+                value={recherche}
+                onChange={(e) => setRecherche(e.target.value)}
+              />
 
-                  <div className='text-right shrink-0'>
-                    <p className='text-xs text-gray-600'>Prix</p>
-                    <p className='font-black text-sm text-success'>{fmt(e.prix)}</p>
-                  </div>
+              {equipements.length === 0 && (
+                <p className='mt-4 text-sm font-normal opacity-70'>Aucun équipement enregistré pour le moment.</p>
+              )}
+              {equipements.length > 0 && visibles.length === 0 && (
+                <p className='mt-4 text-sm font-normal opacity-70'>Aucun équipement ne correspond à la recherche.</p>
+              )}
 
-                  {peutSupprimer && (
-                    <button
-                      type="button"
-                      aria-label="Supprimer l'équipement"
-                      title="Supprimer (possible pendant 24h)"
-                      className='btn btn-ghost btn-sm btn-circle text-error shrink-0'
-                      onClick={() => supprimer(e)}
-                    >
-                      <Trash2 className='w-4 h-4' />
-                    </button>
-                  )}
+              {visibles.length > 0 && (
+                <div className='mt-4 divide-y divide-base-300'>
+                  {visibles.map((e) => {
+                    const factureOk = e.factureUrl && e.factureUrl.startsWith('https://')
+                    const photoOk = e.photoUrl && e.photoUrl.startsWith('https://')
+                    return (
+                      <div key={e.id} className='flex items-center gap-3 py-3'>
+                        {photoOk ? (
+                          <a href={e.photoUrl as string} target='_blank' rel='noopener noreferrer' className='shrink-0'>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={e.photoUrl as string}
+                              alt={e.designation}
+                              className='h-14 w-14 rounded-xl border border-base-300 object-cover'
+                            />
+                          </a>
+                        ) : (
+                          <span className='flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-base-200'>
+                            <Wrench className='h-6 w-6 opacity-50' />
+                          </span>
+                        )}
+
+                        <div className='min-w-0 flex-1'>
+                          <p className='truncate font-bold leading-tight'>{e.designation}</p>
+                          <p className='text-xs font-normal opacity-60'>
+                            Acquis le {new Date(e.dateAcquisition).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}
+                          </p>
+                          {e.numeroSerie && (
+                            <p className='truncate text-xs font-normal opacity-60'>N° de série : {e.numeroSerie}</p>
+                          )}
+                          {factureOk && (
+                            <a
+                              href={e.factureUrl as string}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='link link-primary mt-0.5 inline-block text-xs font-semibold'
+                            >
+                              Voir la facture
+                            </a>
+                          )}
+                        </div>
+
+                        <div className='shrink-0 text-right'>
+                          <p className='text-xs font-normal opacity-60'>Prix</p>
+                          <p className='font-bold tabular-nums text-success'>{fmt(e.prix)}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              )}
+            </section>
           </div>
         </div>
-
       </div>
     </Wrapper>
   )

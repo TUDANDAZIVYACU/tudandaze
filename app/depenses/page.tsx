@@ -3,10 +3,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import type { Depense } from '@prisma/client'
-import { createDepense, readDepenses, updateDepense, deleteDepense, getBusinessName } from '../actions'
+import { createDepense, readDepenses, updateDepense, getBusinessName } from '../actions'
 import { toast } from 'react-toastify'
-import { Pencil, Trash, Plus, X, Download, RotateCcw } from 'lucide-react'
+import { Pencil, Plus, X, Download, RotateCcw } from 'lucide-react'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
+import { Kpi, CarteBarres, CarteAnalyse, BoutonsPeriode, type Analyse } from '../components/analyse-ui'
+import { PERIODES, bornesPeriode, periodePrecedente, nbJours, fmt, variationPct, type PeriodeId } from '@/lib/periodes'
 
 const CATEGORIES = [
   "Loyer", "Salaires", "Transport", "Electricité",
@@ -137,18 +139,6 @@ const DepensesPage = () => {
     setShowModal(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Confirmer la suppression ?")) return
-    try {
-      await deleteDepense(id, email)
-      toast.success("Dépense supprimée")
-      notifierStock()
-    } catch (error) {
-      console.error(error)
-      toast.error("Erreur lors de la suppression")
-    }
-  }
-
   const resetFiltres = () => {
     setFilterCategorie("")
     setDateDebut(todayISO())
@@ -168,6 +158,72 @@ const DepensesPage = () => {
   })
 
   const total = filtered.reduce((sum, d) => sum + d.montant, 0)
+
+  // ───────── Analyse de la sélection ─────────
+  const periodeActive = PERIODES.find((pr) => {
+    const b = bornesPeriode(pr.id)
+    return b.debut === dateDebut && b.fin === dateFin
+  })?.id
+  const choisirPeriode = (id: PeriodeId) => {
+    const b = bornesPeriode(id)
+    setDateDebut(b.debut)
+    setDateFin(b.fin)
+  }
+
+  const datesValides = !!dateDebut && !!dateFin && dateDebut <= dateFin
+  const nombre = filtered.length
+  const moyenne = nombre > 0 ? total / nombre : 0
+  const plusGrosse = filtered.reduce<Depense | null>((m, d) => (m === null || d.montant > m.montant ? d : m), null)
+  const parCategorie = (Object.entries as (o: Record<string, number>) => [string, number][])(
+    filtered.reduce<Record<string, number>>((acc, d) => {
+      acc[d.categorie] = (acc[d.categorie] ?? 0) + d.montant
+      return acc
+    }, {})
+  ).sort((a, b) => b[1] - a[1])
+  const jours = datesValides ? nbJours(dateDebut, dateFin) : 0
+
+  // Période précédente de même durée, avec le même filtre de catégorie
+  let totalPrecedent: number | null = null
+  if (datesValides) {
+    const prec = periodePrecedente(dateDebut, dateFin)
+    const dPrec = new Date(`${prec.debut}T00:00:00.000Z`)
+    const fPrec = new Date(`${prec.fin}T23:59:59.999Z`)
+    totalPrecedent = depenses
+      .filter((d) => {
+        const date = new Date(d.date)
+        return (filterCategorie ? d.categorie === filterCategorie : true) && date >= dPrec && date <= fPrec
+      })
+      .reduce((sum, d) => sum + d.montant, 0)
+  }
+  const pctTotal = variationPct(total, totalPrecedent)
+
+  const analyses: Analyse[] = []
+  if (nombre === 0) {
+    analyses.push({ ton: 'info', texte: 'Aucune dépense sur cette période.' })
+  } else {
+    if (parCategorie.length > 0 && total > 0) {
+      const [nomCat, montantCat] = parCategorie[0]
+      analyses.push({
+        ton: 'info',
+        texte: `La catégorie « ${nomCat} » pèse le plus : ${Math.round((montantCat / total) * 100)} % du total (${fmt(montantCat)} FBU).`
+      })
+    }
+    if (plusGrosse) {
+      analyses.push({
+        ton: 'info',
+        texte: `La plus grosse dépense est « ${plusGrosse.description} » : ${fmt(plusGrosse.montant)} FBU (${plusGrosse.categorie}, ${new Date(plusGrosse.date).toLocaleDateString('fr-FR')}).`
+      })
+    }
+    if (jours > 1) {
+      analyses.push({ ton: 'info', texte: `En moyenne, ${fmt(total / jours)} FBU sont dépensés par jour.` })
+    }
+    if (pctTotal !== null && Math.abs(pctTotal) >= 1) {
+      analyses.push({
+        ton: pctTotal > 0 ? 'alerte' : 'ok',
+        texte: `Les dépenses ont ${pctTotal > 0 ? 'augmenté' : 'baissé'} de ${Math.abs(Math.round(pctTotal))} % par rapport à la période précédente (${fmt(totalPrecedent ?? 0)} FBU).`
+      })
+    }
+  }
 
   const titrePdfListe = filterCategorie
     ? `LISTE DES DEPENSES/${filterCategorie}`
@@ -290,22 +346,35 @@ const DepensesPage = () => {
           </div>
         </div>
 
-        {/* Total de la sélection */}
-        <section className='rounded-2xl bg-base-100 p-4 shadow-sm md:p-5'>
-          <p className='text-sm font-normal opacity-70'>
-            Total des dépenses{filterCategorie ? `, catégorie ${filterCategorie}` : ''}
-          </p>
-          <p className='text-3xl font-bold tabular-nums text-error md:text-4xl'>
-            {total.toLocaleString()}{' '}
-            <span className='text-base font-medium opacity-60'>FBU</span>
-          </p>
-          <p className='text-xs font-normal opacity-60'>
-            {filtered.length} dépense{filtered.length > 1 ? 's' : ''} du {formatISO(dateDebut)} au {formatISO(dateFin)}
-          </p>
+        {/* Chiffres clés de la sélection, comparés à la période précédente */}
+        <section className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+          <Kpi
+            libelle={`Total des dépenses${filterCategorie ? ` (${filterCategorie})` : ''}`}
+            valeur={fmt(total)}
+            classeValeur='text-error'
+            pct={pctTotal}
+            bonSiHausse={false}
+          />
+          <Kpi
+            libelle='Nombre de dépenses'
+            valeur={String(nombre)}
+            unite=''
+            note={`du ${formatISO(dateDebut)} au ${formatISO(dateFin)}`}
+          />
+          <Kpi libelle='Dépense moyenne' valeur={fmt(moyenne)} />
+          <Kpi
+            libelle='Plus grosse dépense'
+            valeur={fmt(plusGrosse?.montant ?? 0)}
+            classeValeur='text-error'
+            note={plusGrosse ? plusGrosse.description : 'aucune'}
+          />
         </section>
 
         {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
         <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
+          <div className='col-span-3 md:col-span-4'>
+            <BoutonsPeriode actif={periodeActive} onChoisir={choisirPeriode} />
+          </div>
           <label className={`${champ} col-span-3 md:col-span-1`}>
             <span className={libelle}>Catégorie</span>
             <select
@@ -352,6 +421,23 @@ const DepensesPage = () => {
           </button>
         </section>
 
+        {/* Répartition par catégorie et analyse */}
+        {nombre > 0 && (
+          <div className='grid gap-4 lg:grid-cols-12'>
+            <CarteBarres
+              titre='Par catégorie'
+              classe='bg-error'
+              className='lg:col-span-5'
+              lignes={parCategorie.map(([nom, montant]) => ({
+                libelle: nom,
+                valeur: montant,
+                detail: total > 0 ? `${Math.round((montant / total) * 100)} %` : undefined
+              }))}
+            />
+            <CarteAnalyse titre='Analyse des dépenses' analyses={analyses} className='lg:col-span-7' />
+          </div>
+        )}
+
         {/* Liste des dépenses */}
         {filtered.length > 0 ? (
           <div className='divide-y divide-base-300 rounded-2xl bg-base-100 px-4 shadow-sm'>
@@ -375,14 +461,6 @@ const DepensesPage = () => {
                     onClick={() => handleEdit(depense)}
                   >
                     <Pencil className='h-4 w-4' />
-                  </button>
-                  <button
-                    type='button'
-                    className='btn btn-ghost btn-sm btn-circle text-error'
-                    aria-label="Supprimer la dépense"
-                    onClick={() => handleDelete(depense.id)}
-                  >
-                    <Trash className='h-4 w-4' />
                   </button>
                 </div>
               </div>

@@ -2,10 +2,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
-import { createDette, readDettes, updateDette, deleteDette, addPaiement, deletePaiement, getBusinessName } from '../actions'
+import { createDette, readDettes, updateDette, addPaiement, getBusinessName } from '../actions'
 import { toast } from 'react-toastify'
-import { Pencil, Trash, Plus, X, CreditCard, ChevronDown, ChevronUp, RefreshCw, RotateCcw, Download } from 'lucide-react'
+import { Pencil, Plus, X, CreditCard, ChevronDown, ChevronUp, RefreshCw, RotateCcw, Download } from 'lucide-react'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
+import { Kpi, CarteBarres, CarteAnalyse, BoutonsPeriode, type Analyse } from '../components/analyse-ui'
+import { PERIODES, bornesPeriode, periodePrecedente, fmt, variationPct, type PeriodeId } from '@/lib/periodes'
 
 type Paiement = {
   id: string
@@ -168,18 +170,6 @@ const DettesPage = () => {
     setShowDetteModal(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Confirmer la suppression ?")) return
-    try {
-      await deleteDette(id, email)
-      toast.success("Dette supprimée")
-      notifierStock()
-    } catch (error) {
-      console.error(error)
-      toast.error("Erreur lors de la suppression")
-    }
-  }
-
   const ouvrirPaiement = (detteId: string) => {
     setSelectedDetteId(detteId)
     setPaiementForm(getEmptyPaiement())
@@ -219,18 +209,6 @@ const DettesPage = () => {
       toast.error("Erreur lors du paiement")
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleDeletePaiement = async (paiementId: string, detteId: string) => {
-    if (!confirm("Supprimer ce paiement ?")) return
-    try {
-      await deletePaiement(paiementId, detteId, email)
-      toast.success("Paiement supprimé")
-      notifierStock()
-    } catch (error) {
-      console.error(error)
-      toast.error("Erreur lors de la suppression")
     }
   }
 
@@ -285,6 +263,77 @@ const DettesPage = () => {
   const totalDu = filtered.reduce((sum, d) => sum + d.montant, 0)
   const totalPaye = filtered.reduce((sum, d) => sum + d.montantPaye, 0)
   const totalRestant = totalDu - totalPaye
+
+  // ───────── Analyse de la sélection ─────────
+  const periodeActive = dateFilterActive
+    ? PERIODES.find((pr) => {
+        const b = bornesPeriode(pr.id)
+        return b.debut === dateDebut && b.fin === dateFin
+      })?.id
+    : undefined
+  const choisirPeriode = (id: PeriodeId) => {
+    const b = bornesPeriode(id)
+    setDateDebut(b.debut)
+    setDateFin(b.fin)
+    setDateFilterActive(true)
+  }
+
+  const tauxRecouvrement = totalDu > 0 ? (totalPaye / totalDu) * 100 : 0
+  const ouvertes = filtered.filter((d) => d.statut !== "solde").length
+  const debiteurs = (Object.entries as (o: Record<string, number>) => [string, number][])(
+    filtered.reduce<Record<string, number>>((acc, d) => {
+      const reste = d.montant - d.montantPaye
+      if (reste > 0) acc[d.debiteur] = (acc[d.debiteur] ?? 0) + reste
+      return acc
+    }, {})
+  ).sort((a, b) => b[1] - a[1])
+
+  // Dettes accordées pendant la période précédente de même durée, avec le même filtre de statut ou de débiteur
+  const matchFiltre = (d: Dette) =>
+    !filterStatut ? true : STATUTS.includes(filterStatut) ? d.statut === filterStatut : d.debiteur === filterStatut
+  let totalDuPrecedent: number | null = null
+  if (dateFilterActive && dateDebut && dateFin && dateDebut <= dateFin) {
+    const prec = periodePrecedente(dateDebut, dateFin)
+    const dPrec = new Date(`${prec.debut}T00:00:00`)
+    const fPrec = new Date(`${prec.fin}T23:59:59.999`)
+    totalDuPrecedent = dettes
+      .filter((d) => {
+        const date = new Date(d.createdAt)
+        return matchFiltre(d) && date >= dPrec && date <= fPrec
+      })
+      .reduce((sum, d) => sum + d.montant, 0)
+  }
+  const pctTotal = variationPct(totalDu, totalDuPrecedent)
+
+  const analyses: Analyse[] = []
+  if (filtered.length === 0) {
+    analyses.push({ ton: 'info', texte: 'Aucune dette sur cette période.' })
+  } else {
+    if (totalRestant > 0) {
+      analyses.push({
+        ton: 'alerte',
+        texte: `Il reste ${fmt(totalRestant)} FBU à encaisser sur ${ouvertes} dette${ouvertes > 1 ? 's' : ''} en cours.`
+      })
+    } else {
+      analyses.push({ ton: 'ok', texte: 'Toutes les dettes de la sélection sont soldées.' })
+    }
+    analyses.push({
+      ton: tauxRecouvrement >= 70 ? 'ok' : 'info',
+      texte: `Taux de recouvrement : ${Math.round(tauxRecouvrement)} % (${fmt(totalPaye)} FBU payés sur ${fmt(totalDu)}).`
+    })
+    if (debiteurs.length > 0) {
+      analyses.push({
+        ton: 'info',
+        texte: `Plus gros débiteur : ${debiteurs[0][0]}, ${fmt(debiteurs[0][1])} FBU restants.`
+      })
+    }
+    if (pctTotal !== null && Math.abs(pctTotal) >= 1) {
+      analyses.push({
+        ton: pctTotal > 0 ? 'alerte' : 'ok',
+        texte: `Les dettes accordées ont ${pctTotal > 0 ? 'augmenté' : 'baissé'} de ${Math.abs(Math.round(pctTotal))} % par rapport à la période précédente (${fmt(totalDuPrecedent ?? 0)} FBU).`
+      })
+    }
+  }
 
   // Libellé du filtre affiché dans le PDF
   const libelleFiltre = !filterStatut
@@ -416,24 +465,37 @@ const DettesPage = () => {
           </div>
         </div>
 
-        {/* Bilan de la sélection : trois cartes */}
-        <section className='grid grid-cols-3 gap-3'>
-          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-            <p className='text-xs font-normal opacity-70 md:text-sm'>Dettes totales</p>
-            <p className='text-lg font-bold tabular-nums md:text-3xl'>{totalDu.toLocaleString()}</p>
-          </div>
-          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-            <p className='text-xs font-normal opacity-70 md:text-sm'>Déjà payé</p>
-            <p className='text-lg font-bold tabular-nums text-success md:text-3xl'>{totalPaye.toLocaleString()}</p>
-          </div>
-          <div className='rounded-2xl bg-base-100 p-3 shadow-sm md:p-5'>
-            <p className='text-xs font-normal opacity-70 md:text-sm'>Reste à payer</p>
-            <p className='text-lg font-bold tabular-nums text-error md:text-3xl'>{totalRestant.toLocaleString()}</p>
-          </div>
+        {/* Chiffres clés de la sélection, comparés à la période précédente */}
+        <section className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+          <Kpi
+            libelle='Dettes totales'
+            valeur={fmt(totalDu)}
+            pct={dateFilterActive ? pctTotal : undefined}
+            bonSiHausse={false}
+          />
+          <Kpi libelle='Déjà payé' valeur={fmt(totalPaye)} classeValeur='text-success' />
+          <Kpi libelle='Reste à payer' valeur={fmt(totalRestant)} classeValeur='text-error' />
+          <Kpi
+            libelle='Taux de recouvrement'
+            valeur={String(Math.round(tauxRecouvrement))}
+            unite='%'
+            classeValeur={tauxRecouvrement >= 70 ? 'text-success' : 'text-warning'}
+            note={`${ouvertes} dette${ouvertes > 1 ? 's' : ''} en cours`}
+          />
         </section>
 
         {/* Filtres : sur téléphone, Du, Au et l'icône de réinitialisation sont sur la même ligne */}
         <section className='grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-2xl bg-base-100 p-3 shadow-sm md:grid-cols-[2fr_1fr_1fr_auto] md:p-4'>
+          <div className='col-span-3 flex flex-wrap items-center gap-1 md:col-span-4'>
+            <BoutonsPeriode actif={periodeActive} onChoisir={choisirPeriode} />
+            <button
+              type='button'
+              className={`btn btn-sm ${!dateFilterActive ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setDateFilterActive(false)}
+            >
+              Toutes les dates
+            </button>
+          </div>
           <label className={`${champ} col-span-3 md:col-span-1`}>
             <span className={libelle}>Statut ou débiteur</span>
             <select
@@ -486,6 +548,20 @@ const DettesPage = () => {
             <span className='hidden md:inline'>Réinitialiser</span>
           </button>
         </section>
+
+        {/* Plus gros débiteurs et analyse */}
+        {filtered.length > 0 && (
+          <div className='grid gap-4 lg:grid-cols-12'>
+            <CarteBarres
+              titre='Plus gros débiteurs'
+              classe='bg-error'
+              className='lg:col-span-5'
+              vide='Plus rien à encaisser : toutes les dettes sont soldées.'
+              lignes={debiteurs.slice(0, 5).map(([nom, reste]) => ({ libelle: nom, valeur: reste }))}
+            />
+            <CarteAnalyse titre='Analyse des dettes' analyses={analyses} className='lg:col-span-7' />
+          </div>
+        )}
 
         {/* Liste des dettes */}
         <section>
@@ -570,14 +646,6 @@ const DettesPage = () => {
                         >
                           <Pencil className='h-4 w-4' />
                         </button>
-                        <button
-                          type='button'
-                          className='btn btn-ghost btn-sm btn-circle text-error'
-                          aria-label="Supprimer la dette"
-                          onClick={() => handleDelete(dette.id)}
-                        >
-                          <Trash className='h-4 w-4' />
-                        </button>
                       </div>
                     </div>
 
@@ -593,14 +661,6 @@ const DettesPage = () => {
                                 {p.note && `, ${p.note}`}
                               </p>
                             </div>
-                            <button
-                              type='button'
-                              className='btn btn-ghost btn-xs btn-circle text-error'
-                              aria-label="Supprimer le paiement"
-                              onClick={() => handleDeletePaiement(p.id, dette.id)}
-                            >
-                              <Trash className='h-3.5 w-3.5' />
-                            </button>
                           </li>
                         ))}
                       </ul>

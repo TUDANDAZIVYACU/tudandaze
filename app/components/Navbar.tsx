@@ -1,6 +1,6 @@
 "use client";
 import { UserButton, useUser } from '@clerk/nextjs'
-import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, Wrench, CreditCard, Wallet } from 'lucide-react'
+import { ListTree, PackagePlus, Warehouse, HandHeart, Receipt, LayoutDashboard, Users, Scale, CreditCard, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -45,7 +45,6 @@ const lienHistorique: Lien = { href: "/transactions", label: "Historique", icon:
 const lienDettes: Lien = { href: "/dettes", label: "Dettes", icon: ListTree }
 const lienDepenses: Lien = { href: "/depenses", label: "Dépenses", icon: Wallet }
 const lienCentralisation: Lien = { href: "/bilan", label: "Centralisation", court: "Centralis.", icon: Scale }
-const lienEquipements: Lien = { href: "/immobilisations", label: "Équipements", icon: Wrench }
 const lienUtilisateurs: Lien = { href: "/admin", label: "Utilisateurs", icon: Users }
 const lienAbonnement: Lien = { href: "/abonnement", label: "Abonnement", icon: CreditCard }
 
@@ -92,9 +91,9 @@ const Navbar = () => {
 
     // Ordinateur (menu du haut), dans l'ordre :
     // Observation, Produit, Approvisionnement (bouton), Vente, Historique, Dettes, Dépenses, Centralisation,
-    // Équipements, Utilisateurs (administrateur), Abonnement
+    // Utilisateurs (administrateur), Abonnement
     const liensAvant = [lienObservation, lienProduit]
-    const liensApres = [lienVente, lienHistorique, lienDettes, lienDepenses, lienCentralisation, lienEquipements]
+    const liensApres = [lienVente, lienHistorique, lienDettes, lienDepenses, lienCentralisation]
 
     // Téléphone (barre du bas) : tous les liens, dans le même ordre que sur ordinateur, à faire défiler vers la droite.
     // La page ouverte est ramenée au centre de la barre à chaque changement de page.

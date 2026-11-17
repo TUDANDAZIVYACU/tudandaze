@@ -3,8 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Wrapper from '../components/Wrapper'
 import { useUser } from '@clerk/nextjs'
 import { FormDataType, Product } from '@/type'
-import { createProduct, deleteProduct, readProductsWithRealQuantity, checkProductNameExists, getBusinessName } from '../actions'
-import { getProduitsVendus } from '../actions-transactions'
+import { createProduct, readProductsWithRealQuantity, checkProductNameExists, getBusinessName } from '../actions'
 import { toast } from 'react-toastify'
 import ProductComponent from '../components/ProductComponent'
 import EmptyState from '../components/EmptyState'
@@ -12,6 +11,8 @@ import { compresserImage, estPhoto, typeMimePhoto, TAILLE_MAX_PHOTO } from '@/li
 import { envoyerPhoto } from '@/lib/upload-photo'
 import { Download } from 'lucide-react'
 import { notifierStock, useStockSync } from '@/lib/stock-sync'
+import { Kpi, CarteBarres, CarteAnalyse, type Analyse } from '../components/analyse-ui'
+import { fmt } from '@/lib/periodes'
 
 // Date du jour en heure locale ("2026-10-13"), et non en UTC
 const todayISO = () => new Date().toLocaleDateString("en-CA")
@@ -21,7 +22,6 @@ const CreerProduitPage = () => {
   const email = user?.primaryEmailAddress?.emailAddress as string
 
   const [products, setProducts] = useState<Product[]>([])
-  const [produitsVendus, setProduitsVendus] = useState<Set<string>>(new Set())
   const [nomEntreprise, setNomEntreprise] = useState<string>("")
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -69,15 +69,10 @@ const CreerProduitPage = () => {
     }
   }
 
-  // Produits + liste des produits déjà vendus, chargés ensemble pour que le bouton SUPPRIMER n'apparaisse pas à tort
   const fetchProducts = async (userEmail: string) => {
     try {
-      const [data, vendus] = await Promise.all([
-        readProductsWithRealQuantity(userEmail),
-        getProduitsVendus(userEmail)
-      ])
+      const data = await readProductsWithRealQuantity(userEmail)
       if (data) setProducts(data)
-      setProduitsVendus(new Set(vendus))
     } catch (error) {
       console.error(error)
     }
@@ -214,27 +209,55 @@ const CreerProduitPage = () => {
     }
   }
 
-  const handleDeleteProduct = async (product: Product) => {
-    const confirmDelete = confirm("Voulez-vous vraiment supprimer ce produit ?")
-    if (!confirmDelete) return
-    try {
-      await deleteProduct(product.id, email)
-      toast.success("Produit supprimé avec succès")
-
-      // Informe toute l'application qu'un produit a été supprimé
-      notifierStock()
-    } catch (error: any) {
-      console.error(error)
-      toast.error(error?.message || "Erreur lors de la suppression")
-    }
-  }
-
   const filteredProducts = products
     .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter(p => searchQuery.trim() !== "" || (p.quantity ?? 0) > 0)
     .slice(0, 1000)
 
   const inStockProducts = products.filter(p => (p.quantity ?? 0) > 0)
+
+  // ───────── Analyse du stock ─────────
+  const SEUIL_FAIBLE = 12
+  const stockFaible = inStockProducts.filter(p => (p.quantity ?? 0) <= SEUIL_FAIBLE)
+  const epuises = products.filter(p => (p.quantity ?? 0) === 0)
+  const margePct = valeurTotaleStock > 0 ? (margeTotaleStock / valeurTotaleStock) * 100 : 0
+  const topValeur = inStockProducts
+    .map(p => ({ nom: p.name, valeur: (p.prixVente ?? 0) * (p.quantity ?? 0) }))
+    .sort((a, b) => b.valeur - a.valeur)
+    .slice(0, 5)
+  const listeNoms = (liste: Product[]) =>
+    liste.slice(0, 5).map(p => p.name).join(', ') + (liste.length > 5 ? '…' : '')
+
+  const analyses: Analyse[] = []
+  if (products.length === 0) {
+    analyses.push({ ton: 'info', texte: 'Aucun produit enregistré pour le moment.' })
+  } else {
+    analyses.push({
+      ton: 'info',
+      texte: `${inStockProducts.length} produit${inStockProducts.length > 1 ? 's' : ''} en stock, d'une valeur de ${fmt(valeurTotaleStock)} FBU. La marge potentielle est de ${fmt(margeTotaleStock)} FBU (${Math.round(margePct)} % de la valeur).`
+    })
+    if (stockFaible.length > 0) {
+      analyses.push({
+        ton: 'alerte',
+        texte: `${stockFaible.length} produit${stockFaible.length > 1 ? 's' : ''} à réapprovisionner (${SEUIL_FAIBLE} ou moins) : ${listeNoms(stockFaible)}.`
+      })
+    }
+    if (epuises.length > 0) {
+      analyses.push({
+        ton: 'alerte',
+        texte: `${epuises.length} produit${epuises.length > 1 ? 's' : ''} épuisé${epuises.length > 1 ? 's' : ''} : ${listeNoms(epuises)}.`
+      })
+    }
+    if (stockFaible.length === 0 && epuises.length === 0) {
+      analyses.push({ ton: 'ok', texte: `Tous les produits sont au-dessus du seuil de ${SEUIL_FAIBLE}.` })
+    }
+    if (topValeur.length > 0 && valeurTotaleStock > 0) {
+      analyses.push({
+        ton: 'info',
+        texte: `« ${topValeur[0].nom} » représente ${Math.round((topValeur[0].valeur / valeurTotaleStock) * 100)} % de la valeur du stock.`
+      })
+    }
+  }
 
   const handleExportPDF = async () => {
     if (!pdfContentRef.current) return
@@ -330,6 +353,41 @@ const CreerProduitPage = () => {
           <h1 className='text-2xl font-bold leading-tight md:text-3xl'>Produits</h1>
           <p className='text-sm font-normal opacity-60'>Créez un produit, puis suivez ce qu&apos;il y a en stock</p>
         </div>
+
+        {/* Chiffres clés du stock */}
+        <section className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+          <Kpi libelle='Produits en stock' valeur={String(inStockProducts.length)} unite='' classeValeur='text-primary' note={`${products.length} produit${products.length > 1 ? 's' : ''} au total`} />
+          <Kpi libelle='Valeur du stock' valeur={fmt(valeurTotaleStock)} classeValeur='text-success' note='au prix de vente' />
+          <Kpi
+            libelle='Marge totale'
+            valeur={fmt(margeTotaleStock)}
+            classeValeur={margeTotaleStock >= 0 ? 'text-success' : 'text-error'}
+            note={`${Math.round(margePct)} % de la valeur`}
+          />
+          <Kpi
+            libelle='À réapprovisionner'
+            valeur={String(stockFaible.length + epuises.length)}
+            unite=''
+            classeValeur={stockFaible.length + epuises.length > 0 ? 'text-error' : 'text-success'}
+            note={`${stockFaible.length} stock faible, ${epuises.length} épuisé${epuises.length > 1 ? 's' : ''}`}
+          />
+        </section>
+
+        {products.length > 0 && (
+          <div className='grid gap-4 lg:grid-cols-12'>
+            <CarteBarres
+              titre='Produits qui pèsent le plus'
+              classe='bg-primary'
+              className='lg:col-span-5'
+              lignes={topValeur.map((t) => ({
+                libelle: t.nom,
+                valeur: t.valeur,
+                detail: valeurTotaleStock > 0 ? `${Math.round((t.valeur / valeurTotaleStock) * 100)} %` : undefined
+              }))}
+            />
+            <CarteAnalyse titre='Analyse du stock' analyses={analyses} className='lg:col-span-7' />
+          </div>
+        )}
 
         <div className='grid gap-4 lg:grid-cols-12'>
 
@@ -483,19 +541,6 @@ const CreerProduitPage = () => {
               </button>
             </div>
 
-            <div className='mt-4 grid grid-cols-2 divide-x divide-base-300 rounded-2xl bg-base-200'>
-              <div className='p-3 md:p-4'>
-                <p className='text-xs font-normal opacity-70 md:text-sm'>Valeur du stock</p>
-                <p className='text-lg font-bold tabular-nums text-success md:text-2xl'>{valeurTotaleStock.toLocaleString()}</p>
-              </div>
-              <div className='p-3 md:p-4'>
-                <p className='text-xs font-normal opacity-70 md:text-sm'>Marge totale</p>
-                <p className={`text-lg font-bold tabular-nums md:text-2xl ${margeTotaleStock >= 0 ? 'text-success' : 'text-error'}`}>
-                  {margeTotaleStock.toLocaleString()}
-                </p>
-              </div>
-            </div>
-
             <input type="text" placeholder='Rechercher un produit...'
               aria-label='Rechercher un produit'
               className='input input-bordered mt-4 w-full'
@@ -512,8 +557,6 @@ const CreerProduitPage = () => {
                     product={product}
                     handleAddToCart={() => {}}
                     showDetails={true}
-                    onDelete={handleDeleteProduct}
-                    dejaVendu={produitsVendus.has(product.id)}
                   />
                 ))
               ) : (
