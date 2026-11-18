@@ -186,27 +186,29 @@ export default function Home() {
           </button>
         </div>
       ) : (
-        /* Téléphone : récapitulatif, achats et ventes, puis état du stock.
-           Ordinateur : récapitulatif et opérations à gauche, l'état du stock reste à droite. */
+        /* Ordinateur : achats et ventes à gauche ; à droite, le récapitulatif de la journée avec l'état du stock juste en dessous.
+           La carte des achats et ventes a toujours exactement la hauteur de la colonne de droite : elle s'arrête en bas de la carte
+           de l'état du stock, même quand il y a peu de contenu à droite ; si la liste est plus longue, elle défile dans sa carte.
+           Téléphone : récapitulatif, état du stock, puis achats et ventes, sans limite de hauteur. */
         <div className="grid gap-4 lg:grid-cols-12">
-          <div className="order-2 lg:order-none lg:col-span-7">
+          <div className="space-y-4 lg:col-span-5 lg:col-start-8 lg:row-start-1 lg:self-start">
             <ProductOverview
               email={email}
               dateFiltre={dateFiltre}
               donnees={dashboard?.stats ?? null}
               margeTotale={margeTotale}
             />
-          </div>
-          <div className="order-3 lg:order-none lg:col-span-5 lg:row-span-2">
             <StockSummaryTable email={email} dateFiltre={dateFiltre} donnees={dashboard?.summary ?? null} />
           </div>
-          <div className="order-1 lg:order-none lg:col-span-7">
-            <RecentTransactions
-              email={email}
-              dateFiltre={dateFiltre}
-              donnees={dashboard?.transactions ?? null}
-              coutsAchat={dashboard?.coutsAchat}
-            />
+          <div className="lg:relative lg:col-span-7 lg:col-start-1 lg:row-start-1">
+            <div className="lg:absolute lg:-inset-1 lg:overflow-y-auto lg:p-1 lg:[&>*]:min-h-full">
+              <RecentTransactions
+                email={email}
+                dateFiltre={dateFiltre}
+                donnees={dashboard?.transactions ?? null}
+                coutsAchat={dashboard?.coutsAchat}
+              />
+            </div>
           </div>
         </div>
       )}
